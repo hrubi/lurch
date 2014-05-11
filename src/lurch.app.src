@@ -1,0 +1,12 @@
+{application, lurch,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { lurch_app, []}},
+  {env, []}
+ ]}.
