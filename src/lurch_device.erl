@@ -69,16 +69,11 @@ init( _Args ) ->
 
 
 handle_call( { start_device, Driver, Parameters }, _From, State ) ->
-	case do_start_device( Driver, Parameters ) of
-		{ ok, Port } ->
-				DeviceId = make_ref( ),
-				Device = #device{ driver = Driver
-								, parameters = Parameters
-								, id = DeviceId
-								, port = Port },
-				Devices = orddict:store( DeviceId, Device, State#state.devices ),
-				NewState = #state{ devices = Devices },
-				{ reply, { ok, DeviceId }, NewState };
+	case do_create_device( Driver, Parameters ) of
+		{ ok, Device } ->
+				Devices = orddict:store( Device#device.id, Device, State#state.devices ),
+				NewState = State#state{ devices = Devices },
+				{ reply, { ok, Device#device.id }, NewState };
 
 		{ error, Reason } ->
 			{ reply, { error, Reason }, State }
@@ -115,9 +110,18 @@ code_change( _OldVsn, State, _Extra ) ->
 %% Internal functions
 %% ===================================================================
 
-do_start_device( _Driver, _Parameters ) ->
-	Port = undefined,
-	{ ok, Port }.
+do_create_device( Driver, Parameters ) ->
+	case lurch_device_driver:start_driver( Driver, Parameters ) of
+		{ ok, Port } ->
+			DeviceId = make_ref( ),
+			Device = #device{ driver = Driver
+							, parameters = Parameters
+							, id = DeviceId
+							, port = Port },
+			{ ok, Device };
+		{ error, _ } = Response ->
+			Response
+	end.
 
 do_stop_device( _DeviceId ) ->
 	ok.
