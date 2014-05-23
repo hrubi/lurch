@@ -81,7 +81,8 @@ handle_call( { start_device, Driver, Parameters }, _From, State ) ->
 
 handle_call( { stop_device, DeviceId }, _From, State ) ->
 	do_stop_device( DeviceId ),
-	NewState = orddict:erase( DeviceId, State#state.devices ),
+	NewDevices = orddict:erase( DeviceId, State#state.devices ),
+	NewState = State#state{ devices = NewDevices },
 	{ reply, ok, NewState };
 
 handle_call( list_devices, _From, State ) ->
@@ -140,6 +141,11 @@ device_to_proplist( Device ) ->
 
 -define( setup( F ), { setup, fun test_start/0, fun test_stop/1, F } ).
 
+% TODO - test:
+% * starting device fails
+% * server state contains same device parameters as specified
+% * stopping device fails ??
+
 % Test descriptions
 server_test_( ) ->
 	{ "Server can be started and stopped"
@@ -166,13 +172,21 @@ test_is_alive( Pid ) ->
 	[ ?_assert( erlang:is_process_alive( Pid ) ) ].
 
 test_start_stop_device( Server ) ->
-	Result1 = start_device( Server, <<"dummy">>, [ ] ),
-	Result2 = stop_device( Server, element( 2, Result1 ) ),
-	[ ?_assertMatch( { ok, _Ref }, Result1 )
-	, ?_assertEqual( ok, Result2 ) ].
+	DeviceCount = 2,
+	StartResults = [ start_device( Server, <<"dummy">>, [ ] ) ||
+					_N <- lists:seq( 1, DeviceCount ) ],
+	StopResults = [ stop_device( Server, element( 2, StartResult ) ) ||
+					StartResult <- StartResults ],
+	[
+	  % assert all start results are { ok, _ }
+	  ?_assert( lists:all( fun( Res ) -> element( 1, Res ) =:= ok end,
+							StartResults ) ),
+	  % assert all stop results are ok
+	  ?_assert( lists:all( fun( Res ) ->
+							Res =:= ok end, StopResults ) ) ].
 
 test_add_list_devices( Server ) ->
-	DeviceCount = 3,
+	DeviceCount = 2,
 	StartDeviceOk = fun( ) ->
 		{ ok, DeviceId } = start_device( Server, <<"dummy">>, [ ] ),
 		DeviceId
