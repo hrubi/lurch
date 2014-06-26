@@ -1,4 +1,4 @@
-.PHONY: all compile clean
+.PHONY: all compile clean test
 
 REBAR_CONFIG := rebar.config
 REBAR := ./rebar -C $(REBAR_CONFIG)
@@ -11,5 +11,5 @@ compile:
 clean:
 	$(REBAR) clean
 
-tests:
+test:
 	$(REBAR) eunit
