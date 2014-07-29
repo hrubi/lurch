@@ -9,7 +9,7 @@
 % API functions
 -export(
 	[ start/0, start_link/0, stop/1
-	, start_device/3, stop_device/2, list_devices/1
+	, start_device/2, stop_device/2, list_devices/1
 	] ).
 
 % gen_server callbacks
@@ -35,9 +35,9 @@ stop( Server ) ->
 
 -type device_id() :: reference().
 
--spec start_device( pid(), binary(), [ binary() ] ) -> { ok, device_id() }.
-start_device( Server, Driver, Parameters ) ->
-	gen_server:call( Server, { start_device, Driver, Parameters } ).
+-spec start_device( pid(), list() ) -> { ok, device_id() }.
+start_device( Server, Configuration ) ->
+	gen_server:call( Server, { start_device, Configuration } ).
 
 -spec stop_device( pid(), device_id() ) -> ok.
 stop_device( Server, Id ) ->
@@ -68,8 +68,8 @@ init( _Args ) ->
 	{ ok, State }.
 
 
-handle_call( { start_device, Driver, Parameters }, _From, State ) ->
-	case do_start_device( Driver, Parameters ) of
+handle_call( { start_device, Configuration }, _From, State ) ->
+	case do_start_device( Configuration ) of
 		{ ok, Device } ->
 				Devices = orddict:store( Device#device.id, Device, State#state.devices ),
 				NewState = State#state{ devices = Devices },
@@ -111,7 +111,9 @@ code_change( _OldVsn, State, _Extra ) ->
 %% Internal functions
 %% ===================================================================
 
-do_start_device( Driver, Parameters ) ->
+do_start_device( Configuration ) ->
+	Driver = proplists:get_value(driver, Configuration),
+	Parameters = proplists:get_value(parameters, Configuration),
 	case lurch_device_driver:start_driver( Driver, Parameters ) of
 		{ ok, Port } ->
 			DeviceId = make_ref( ),
@@ -173,7 +175,7 @@ test_is_alive( Pid ) ->
 
 test_start_stop_device( Server ) ->
 	DeviceCount = 2,
-	StartResults = [ start_device( Server, <<"dummy">>, [ ] ) ||
+	StartResults = [ start_device( Server, test_driver_config() ) ||
 					_N <- lists:seq( 1, DeviceCount ) ],
 	StopResults = [ stop_device( Server, element( 2, StartResult ) ) ||
 					StartResult <- StartResults ],
@@ -189,7 +191,7 @@ test_start_stop_device( Server ) ->
 test_add_list_devices( Server ) ->
 	DeviceCount = 2,
 	StartDeviceOk = fun( ) ->
-		{ ok, DeviceId } = start_device( Server, <<"dummy">>, [ ] ),
+		{ ok, DeviceId } = start_device( Server, test_driver_config() ),
 		DeviceId
 	end,
 	DeviceIds = [ StartDeviceOk( ) || _N <- lists:seq( 1, DeviceCount ) ],
@@ -200,6 +202,11 @@ test_add_list_devices( Server ) ->
 	[ ?_assertEqual( DeviceCount, length( Result ) )
 	, [ ?_assert( lists:member( Id, DeviceIds ) ) || Id <- GetDeviceFields( id, Result ) ]
 	, [ ?_assertEqual( <<"dummy">>, Driver ) || Driver <- GetDeviceFields( driver, Result ) ]
+	].
+
+test_driver_config( ) ->
+	[ { driver, <<"dummy">> }
+	, { parameters, [] }
 	].
 
 
