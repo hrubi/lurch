@@ -1,3 +1,10 @@
-ebin
+# vim
 .*.swp
+
+# erlang
 .eunit
+deps
+*.o
+*.beam
+*.plt
+erl_crash.dump
