@@ -69,7 +69,7 @@ init( _Args ) ->
 
 
 handle_call( { start_device, Driver, Parameters }, _From, State ) ->
-	case do_create_device( Driver, Parameters ) of
+	case do_start_device( Driver, Parameters ) of
 		{ ok, Device } ->
 				Devices = orddict:store( Device#device.id, Device, State#state.devices ),
 				NewState = State#state{ devices = Devices },
@@ -111,7 +111,7 @@ code_change( _OldVsn, State, _Extra ) ->
 %% Internal functions
 %% ===================================================================
 
-do_create_device( Driver, Parameters ) ->
+do_start_device( Driver, Parameters ) ->
 	case lurch_device_driver:start_driver( Driver, Parameters ) of
 		{ ok, Port } ->
 			DeviceId = make_ref( ),
@@ -180,10 +180,11 @@ test_start_stop_device( Server ) ->
 	[
 	  % assert all start results are { ok, _ }
 	  ?_assert( lists:all( fun( Res ) -> element( 1, Res ) =:= ok end,
-							StartResults ) ),
+							StartResults ) )
 	  % assert all stop results are ok
-	  ?_assert( lists:all( fun( Res ) ->
-							Res =:= ok end, StopResults ) ) ].
+	, ?_assert( lists:all( fun( Res ) ->
+							Res =:= ok end, StopResults ) )
+	].
 
 test_add_list_devices( Server ) ->
 	DeviceCount = 2,
