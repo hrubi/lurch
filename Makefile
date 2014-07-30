@@ -1,15 +1,24 @@
-.PHONY: all compile clean test
+.PHONY: all compile clean test deps
 
 REBAR_CONFIG := rebar.config
 REBAR := ./rebar -C $(REBAR_CONFIG)
 
 all: compile
 
-compile:
+compile: deps/init rebar.config
 	$(REBAR) compile
+
+deps: deps/init
+
+deps/init:
+	$(REBAR) get-deps
+	touch $@
 
 clean:
 	$(REBAR) clean
 
-test:
-	$(REBAR) eunit
+clean-deps:
+	rm -rf deps
+
+test: deps
+	$(REBAR) eunit skip_deps=true
