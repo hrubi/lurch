@@ -164,9 +164,13 @@ device_list_test_( ) ->
 % Setup functions
 test_start( ) ->
 	{ ok, Pid } = start( ),
+	meck:new( lurch_device_driver, [ ] ),
+	meck:expect( lurch_device_driver, start_driver,
+				fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
 	Pid.
 
 test_stop( Pid ) ->
+	meck:unload( lurch_device_driver ),
 	stop( Pid ).
 
 % Actual tests
