@@ -36,9 +36,9 @@ driver_path( Driver ) ->
 	end,
 	filename:join( [ driver_dir( ), Driver ] ).
 
+
 driver_dir( ) ->
 	code:lib_dir( lurch, drivers ).
-
 
 
 %% ===================================================================
@@ -56,12 +56,15 @@ driver_path_test_( ) ->
 		]
 	}.
 
+
 driver_start_stop_test_( ) ->
 	{ "Driver can be started and stopped",
 	  fun test_start_stop_driver/0 }.
 
+
 % Helper functions
 echo_driver( ) -> filename:join( [ "test", "echo.sh" ] ).
+
 
 % Actual tests
 test_start_stop_driver( ) ->

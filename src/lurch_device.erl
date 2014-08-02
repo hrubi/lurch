@@ -63,7 +63,7 @@ list_devices( Server ) ->
 	{ devices :: orddict:orddict()
 	} ).
 
--spec init( term() ) -> { ok, [ term() ]} | { stop, term() }.
+
 init( _Args ) ->
 	Devices = orddict:new(),
 	State = #state{ devices = Devices },
@@ -81,11 +81,13 @@ handle_call( { start_device, Configuration }, _From, State ) ->
 			{ reply, { error, Reason }, State }
 	end;
 
+
 handle_call( { stop_device, DeviceId }, _From, State ) ->
 	do_stop_device( DeviceId ),
 	NewDevices = orddict:erase( DeviceId, State#state.devices ),
 	NewState = State#state{ devices = NewDevices },
 	{ reply, ok, NewState };
+
 
 handle_call( list_devices, _From, State ) ->
 	DeviceList = lists:map(
@@ -93,20 +95,26 @@ handle_call( list_devices, _From, State ) ->
 				   orddict:to_list( State#state.devices ) ),
 	{ reply, { ok, DeviceList }, State };
 
+
 handle_call( stop, _From, State ) ->
 	{ stop, shutdown, ok, State }.
+
 
 handle_cast( _Request, State ) ->
 	{ noreply, State }.
 
+
 handle_info( _Info, State ) ->
 	{ noreply, State }.
+
 
 terminate( _Reason, _State ) ->
 	ok.
 
+
 code_change( _OldVsn, State, _Extra ) ->
 	{ ok, State }.
+
 
 
 %% ===================================================================
@@ -128,14 +136,17 @@ do_start_device( Configuration ) ->
 			Response
 	end.
 
+
 do_stop_device( _DeviceId ) ->
 	ok.
+
 
 device_to_proplist( Device ) ->
 	[ { id, Device#device.id }
 	, { driver, Device#device.driver }
 	, { parameters, Device#device.parameters }
 	].
+
 
 %% ===================================================================
 %% Tests
@@ -155,21 +166,26 @@ server_test_( ) ->
 	{ "Server can be started and stopped"
 	, ?setup( fun test_is_alive/1 ) }.
 
+
 device_start_stop_test_( ) ->
 	{ "Device can be started and stopped"
 	, ?setup( fun test_start_stop_device/1 ) }.
+
 
 device_start_error_test_( ) ->
 	{ "Handle device startup error"
 	, fun test_start_device_error/0 }.
 
+
 device_list_test_( ) ->
 	{ "Devices can be added and listed"
 	, ?setup( fun test_add_list_devices/1 ) }.
 
+
 % Actual tests
 test_is_alive( Pid ) ->
 	[ ?_assert( erlang:is_process_alive( Pid ) ) ].
+
 
 test_start_stop_device( Pid ) ->
 	DeviceCount = 2,
@@ -183,6 +199,7 @@ test_start_stop_device( Pid ) ->
 	, ?_assert( lists:all( fun( Res ) ->
 							Res =:= ok end, StopResults ) )
 	].
+
 
 test_start_device_error( ) ->
 	{ ok, Pid } = start( ),
@@ -212,10 +229,12 @@ test_add_list_devices( Pid ) ->
 	, [ ?_assertEqual( <<"dummy">>, Driver ) || Driver <- GetDeviceFields( driver, Result ) ]
 	].
 
+
 test_driver_config( ) ->
 	[ { driver, <<"dummy">> }
 	, { parameters, [] }
 	].
+
 
 % Helper functions
 test_start( ) ->
@@ -225,8 +244,10 @@ test_start( ) ->
 				 fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
 	Pid.
 
+
 test_stop( Pid ) ->
 	meck:unload( lurch_driver_port ),
 	stop( Pid ).
+
 
 -endif. % TEST
