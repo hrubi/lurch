@@ -1,6 +1,8 @@
 % @copyright 2014, Jan Hruban
 %
-% @doc Provides communication mechanism to/from drivers
+% @doc Communicates with process handling port, which does the heavy lifting
+% To guarantee good throughput, this module mediates the client requests and
+% puts them together.
 
 -module( lurch_device ).
 

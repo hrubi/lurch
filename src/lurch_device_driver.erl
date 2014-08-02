@@ -1,3 +1,7 @@
+% @copyright 2014, Jan Hruban
+%
+% @doc Provides communication mechanism to/from external driver
+
 -module( lurch_device_driver ).
 
 % API functions
