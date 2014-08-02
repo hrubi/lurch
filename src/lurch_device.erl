@@ -172,7 +172,7 @@ test_start( ) ->
 	{ ok, Pid } = start( ),
 	meck:new( lurch_device_driver, [ ] ),
 	meck:expect( lurch_device_driver, start_driver,
-				fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
+				 fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
 	Pid.
 
 test_stop( Pid ) ->
@@ -183,17 +183,15 @@ test_stop( Pid ) ->
 test_is_alive( Pid ) ->
 	[ ?_assert( erlang:is_process_alive( Pid ) ) ].
 
-test_start_stop_device( Server ) ->
+test_start_stop_device( Pid ) ->
 	DeviceCount = 2,
-	StartResults = [ start_device( Server, test_driver_config() ) ||
+	StartResults = [ start_device( Pid, test_driver_config( ) ) ||
 					_N <- lists:seq( 1, DeviceCount ) ],
-	StopResults = [ stop_device( Server, element( 2, StartResult ) ) ||
+	StopResults = [ stop_device( Pid, element( 2, StartResult ) ) ||
 					StartResult <- StartResults ],
 	[
-	  % assert all start results are { ok, _ }
 	  ?_assert( lists:all( fun( Res ) -> element( 1, Res ) =:= ok end,
 							StartResults ) )
-	  % assert all stop results are ok
 	, ?_assert( lists:all( fun( Res ) ->
 							Res =:= ok end, StopResults ) )
 	].
@@ -210,14 +208,14 @@ test_start_device_error( ) ->
 	Tests.
 
 
-test_add_list_devices( Server ) ->
+test_add_list_devices( Pid ) ->
 	DeviceCount = 2,
 	StartDeviceOk = fun( ) ->
-		{ ok, DeviceId } = start_device( Server, test_driver_config() ),
+		{ ok, DeviceId } = start_device( Pid, test_driver_config() ),
 		DeviceId
 	end,
 	DeviceIds = [ StartDeviceOk( ) || _N <- lists:seq( 1, DeviceCount ) ],
-	{ ok, Result } = list_devices( Server ),
+	{ ok, Result } = list_devices( Pid ),
 	GetDeviceFields = fun( Field, Devices ) ->
 		[ proplists:get_value( Field, Device ) || Device <- Devices ]
 	end,
