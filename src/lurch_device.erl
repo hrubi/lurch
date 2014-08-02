@@ -159,6 +159,10 @@ device_start_stop_test_( ) ->
 	{ "Device can be started and stopped"
 	, ?setup( fun test_start_stop_device/1 ) }.
 
+device_start_error_test_( ) ->
+	{ "Handle device startup error"
+	, fun test_start_device_error/0 }.
+
 device_list_test_( ) ->
 	{ "Devices can be added and listed"
 	, ?setup( fun test_add_list_devices/1 ) }.
@@ -193,6 +197,18 @@ test_start_stop_device( Server ) ->
 	, ?_assert( lists:all( fun( Res ) ->
 							Res =:= ok end, StopResults ) )
 	].
+
+test_start_device_error( ) ->
+	{ ok, Pid } = start( ),
+	meck:new( lurch_device_driver, [ ] ),
+	meck:expect( lurch_device_driver, start_driver,
+				 fun( _Driver, _Parameters ) -> { error, enoent } end ),
+	StartResult = start_device( Pid, test_driver_config( ) ),
+	Tests = [
+			  ?_assertMatch( { error, _Error }, StartResult ) ],
+	test_stop( Pid ),
+	Tests.
+
 
 test_add_list_devices( Server ) ->
 	DeviceCount = 2,
