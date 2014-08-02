@@ -116,7 +116,7 @@ code_change( _OldVsn, State, _Extra ) ->
 do_start_device( Configuration ) ->
 	Driver = proplists:get_value(driver, Configuration),
 	Parameters = proplists:get_value(parameters, Configuration),
-	case lurch_device_driver:start_driver( Driver, Parameters ) of
+	case lurch_driver_port:start_driver( Driver, Parameters ) of
 		{ ok, Port } ->
 			DeviceId = make_ref( ),
 			Device = #device{ driver = Driver
@@ -170,13 +170,13 @@ device_list_test_( ) ->
 % Setup functions
 test_start( ) ->
 	{ ok, Pid } = start( ),
-	meck:new( lurch_device_driver, [ ] ),
-	meck:expect( lurch_device_driver, start_driver,
+	meck:new( lurch_driver_port, [ ] ),
+	meck:expect( lurch_driver_port, start_driver,
 				 fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
 	Pid.
 
 test_stop( Pid ) ->
-	meck:unload( lurch_device_driver ),
+	meck:unload( lurch_driver_port ),
 	stop( Pid ).
 
 % Actual tests
@@ -198,8 +198,8 @@ test_start_stop_device( Pid ) ->
 
 test_start_device_error( ) ->
 	{ ok, Pid } = start( ),
-	meck:new( lurch_device_driver, [ ] ),
-	meck:expect( lurch_device_driver, start_driver,
+	meck:new( lurch_driver_port, [ ] ),
+	meck:expect( lurch_driver_port, start_driver,
 				 fun( _Driver, _Parameters ) -> { error, enoent } end ),
 	StartResult = start_device( Pid, test_driver_config( ) ),
 	Tests = [

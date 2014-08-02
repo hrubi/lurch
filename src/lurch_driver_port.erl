@@ -2,7 +2,7 @@
 %
 % @doc Provides communication mechanism to/from external driver
 
--module( lurch_device_driver ).
+-module( lurch_driver_port ).
 
 % API functions
 -export(
