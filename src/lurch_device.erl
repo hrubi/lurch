@@ -167,18 +167,6 @@ device_list_test_( ) ->
 	{ "Devices can be added and listed"
 	, ?setup( fun test_add_list_devices/1 ) }.
 
-% Setup functions
-test_start( ) ->
-	{ ok, Pid } = start( ),
-	meck:new( lurch_driver_port, [ ] ),
-	meck:expect( lurch_driver_port, start_driver,
-				 fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
-	Pid.
-
-test_stop( Pid ) ->
-	meck:unload( lurch_driver_port ),
-	stop( Pid ).
-
 % Actual tests
 test_is_alive( Pid ) ->
 	[ ?_assert( erlang:is_process_alive( Pid ) ) ].
@@ -229,5 +217,16 @@ test_driver_config( ) ->
 	, { parameters, [] }
 	].
 
+% Helper functions
+test_start( ) ->
+	{ ok, Pid } = start( ),
+	meck:new( lurch_driver_port, [ ] ),
+	meck:expect( lurch_driver_port, start_driver,
+				 fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
+	Pid.
+
+test_stop( Pid ) ->
+	meck:unload( lurch_driver_port ),
+	stop( Pid ).
 
 -endif. % TEST
