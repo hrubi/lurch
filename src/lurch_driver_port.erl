@@ -17,6 +17,7 @@
 %% API functions
 %% ===================================================================
 
+-spec start_driver( string(), [string()] ) -> { ok, port() } | { error, term() }.
 start_driver( Driver, Parameters ) ->
 	try Port = open_port( { spawn_executable, driver_path( Driver ) },
 						  [ { args, Parameters }
@@ -29,6 +30,7 @@ start_driver( Driver, Parameters ) ->
 	end.
 
 
+-spec stop_driver( port() ) -> ok.
 stop_driver( Port ) ->
 	{ os_pid, Pid } = erlang:port_info( Port, os_pid ),
 	erlang:port_close( Port ),
@@ -39,6 +41,7 @@ stop_driver( Port ) ->
 	end.
 
 
+-spec driver_path( string() ) -> ok.
 driver_path( Driver ) ->
 	case filename:pathtype( Driver ) of
 		relative -> ok;
