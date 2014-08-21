@@ -24,11 +24,11 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--spec start( ) -> pid().
+-spec start( ) -> ignore | { error, term()} | { ok, pid() }.
 start( ) ->
 	gen_server:start( ?MODULE, [ ], [ ] ).
 
--spec start_link( ) -> pid().
+-spec start_link( ) -> ignore | { error, term()} | { ok, pid() }.
 start_link( ) ->
 	gen_server:start_link( ?MODULE, [ ], [ ] ).
 
@@ -46,11 +46,12 @@ start_device( Server, Configuration ) ->
 stop_device( Server, Id ) ->
 	gen_server:call( Server, { stop_device, Id } ).
 
--spec list_devices( pid() ) ->  [ [ proplists:property() ] ].
+-spec list_devices( pid() ) ->  { ok, [ [ proplists:property() ] ] }.
 list_devices( Server ) ->
 	gen_server:call( Server, list_devices ).
 
--spec poll_device_event( pid() , device_id(), binary() ) -> { ok, term() } | { error, no_such_device } | { error | no_such_event }.
+-spec poll_device_event( pid() , device_id(), binary() ) ->
+	{ ok, term() } | { error, no_such_device } | { error | no_such_event }.
 poll_device_event( Server, Id, Event ) ->
 	gen_server:call( Server, { poll_device_event, Id, Event } ).
 
@@ -145,6 +146,7 @@ code_change( _OldVsn, State, _Extra ) ->
 %% Internal functions
 %% ===================================================================
 
+-spec do_start_device( term() ) -> { ok, term() } | { error, term() }.
 do_start_device( Configuration ) ->
 	Driver = proplists:get_value(driver, Configuration),
 	Parameters = proplists:get_value(parameters, Configuration),
@@ -275,7 +277,7 @@ test_stop( Pid ) ->
 test_poll_device_event( Pid ) ->
 	{ ok, DeviceId } = start_device( Pid, dummy_driver_config( ) ),
 	InvalidDeviceId = make_ref(),
-	InvalidEvent = non_existing_event,
+	InvalidEvent = <<"non_existing_event">>,
 	Res1 = poll_device_event( Pid, DeviceId, ?EVENT_NAME ),
 	Res2 = poll_device_event( Pid, InvalidDeviceId, ?EVENT_NAME ),
 	Res3 = poll_device_event( Pid, DeviceId, InvalidEvent ),

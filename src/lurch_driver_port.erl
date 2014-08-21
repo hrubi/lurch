@@ -19,7 +19,7 @@
 %% API functions
 %% ===================================================================
 
--spec start_driver( string(), [ string() ] ) -> { ok, port() } | { error, term() }.
+-spec start_driver( binary(), [ binary() ] ) -> { ok, port() } | { error, term() }.
 start_driver( Driver, Parameters ) ->
 	try Port = open_port( { spawn_executable, driver_path( Driver ) },
 						  [ { args, Parameters }
@@ -52,7 +52,7 @@ get_event( Port, Event ) ->
 %% Internal functions
 %% ===================================================================
 
--spec driver_path( string() ) -> ok.
+-spec driver_path( binary() ) -> string().
 driver_path( Driver ) ->
 	case filename:pathtype( Driver ) of
 		relative -> ok;
@@ -79,9 +79,9 @@ format_cmd( Cmd, Data ) ->
 % Test descriptions
 driver_path_test_( ) ->
 	{ "filename sanity checks",
-		[ { "forbidden absolute path", ?_assertThrow( { error, bad_driver }, driver_path( "/absolute/path" ) ) }
-		, { "forbidden relative path", ?_assertThrow( { error, bad_driver }, driver_path( "dots/../in/path" ) ) }
-		, { "forbidden relative path", ?_assertThrow( { error, bad_driver }, driver_path( "dots/end/.." ) ) }
+		[ { "forbidden absolute path", ?_assertThrow( { error, bad_driver }, driver_path( <<"/absolute/path">> ) ) }
+		, { "forbidden relative path", ?_assertThrow( { error, bad_driver }, driver_path( <<"dots/../in/path">> ) ) }
+		, { "forbidden relative path", ?_assertThrow( { error, bad_driver }, driver_path( <<"dots/end/..">> ) ) }
 		]
 	}.
 

@@ -22,3 +22,6 @@ clean-deps:
 
 test: deps
 	$(REBAR) eunit skip_deps=true
+
+dialyze:
+	dialyzer -I include --src -r src
