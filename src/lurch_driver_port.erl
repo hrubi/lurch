@@ -17,7 +17,7 @@
 %% API functions
 %% ===================================================================
 
--spec start_driver( string(), [string()] ) -> { ok, port() } | { error, term() }.
+-spec start_driver( string(), [ string() ] ) -> { ok, port() } | { error, term() }.
 start_driver( Driver, Parameters ) ->
 	try Port = open_port( { spawn_executable, driver_path( Driver ) },
 						  [ { args, Parameters }

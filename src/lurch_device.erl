@@ -156,11 +156,6 @@ device_to_proplist( Device ) ->
 
 -define( setup( F ), { setup, fun test_start/0, fun test_stop/1, F } ).
 
-% TODO - test:
-% * starting device fails
-% * server state contains same device parameters as specified
-% * stopping device fails ??
-
 % Test descriptions
 server_test_( ) ->
 	{ "Server can be started and stopped"
@@ -207,8 +202,7 @@ test_start_device_error( ) ->
 	meck:expect( lurch_driver_port, start_driver,
 				 fun( _Driver, _Parameters ) -> { error, enoent } end ),
 	StartResult = start_device( Pid, test_driver_config( ) ),
-	Tests = [
-			  ?_assertMatch( { error, _Error }, StartResult ) ],
+	Tests = [ ?_assertMatch( { error, _Error }, StartResult ) ],
 	test_stop( Pid ),
 	Tests.
 
@@ -230,12 +224,6 @@ test_add_list_devices( Pid ) ->
 	].
 
 
-test_driver_config( ) ->
-	[ { driver, <<"dummy">> }
-	, { parameters, [] }
-	].
-
-
 % Helper functions
 test_start( ) ->
 	{ ok, Pid } = start( ),
@@ -249,5 +237,10 @@ test_stop( Pid ) ->
 	meck:unload( lurch_driver_port ),
 	stop( Pid ).
 
+
+test_driver_config( ) ->
+	[ { driver, <<"dummy">> }
+	, { parameters, [] }
+	].
 
 -endif. % TEST
