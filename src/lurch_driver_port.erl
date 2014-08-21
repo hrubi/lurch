@@ -10,6 +10,8 @@
 	, stop_driver/1
 	] ).
 
+-define( DRIVER_DIR, code:lib_dir( lurch, drivers ) ).
+
 
 %% ===================================================================
 %% API functions
@@ -46,11 +48,7 @@ driver_path( Driver ) ->
 		true -> throw( { error, bad_driver } );
 		false -> ok
 	end,
-	filename:join( [ driver_dir( ), Driver ] ).
-
-
-driver_dir( ) ->
-	code:lib_dir( lurch, drivers ).
+	filename:join( [ ?DRIVER_DIR, Driver ] ).
 
 
 %% ===================================================================
