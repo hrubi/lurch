@@ -42,7 +42,7 @@ stop( Server ) ->
 start_device( Server, Configuration ) ->
 	gen_server:call( Server, { start_device, Configuration } ).
 
--spec stop_device( pid(), device_id() ) -> ok.
+-spec stop_device( pid(), device_id() ) -> ok | { error | no_such_device }.
 stop_device( Server, Id ) ->
 	gen_server:call( Server, { stop_device, Id } ).
 
@@ -89,10 +89,14 @@ handle_call( { start_device, Configuration }, _From, State ) ->
 
 
 handle_call( { stop_device, DeviceId }, _From, State ) ->
-	do_stop_device( DeviceId ),
-	NewDevices = orddict:erase( DeviceId, State#state.devices ),
-	NewState = State#state{ devices = NewDevices },
-	{ reply, ok, NewState };
+	case orddict:find( DeviceId, State#state.devices ) of
+		{ ok, Device } ->
+			lurch_driver_port:stop_driver( Device#device.port ),
+			NewDevices = orddict:erase( DeviceId, State#state.devices ),
+			NewState = State#state{ devices = NewDevices },
+			{ reply, ok, NewState };
+		error -> {reply, { error, no_such_device }, State }
+	end;
 
 
 handle_call( list_devices, _From, State ) ->
@@ -157,10 +161,6 @@ do_start_device( Configuration ) ->
 		{ error, _ } = Response ->
 			Response
 	end.
-
-
-do_stop_device( _DeviceId ) ->
-	ok.
 
 
 device_to_proplist( Device ) ->
@@ -262,6 +262,8 @@ test_start( ) ->
 	meck:new( lurch_driver_port, [ ] ),
 	meck:expect( lurch_driver_port, start_driver,
 				 fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
+	meck:expect( lurch_driver_port, stop_driver,
+				 fun( Port ) -> ok end ),
 	Pid.
 
 
