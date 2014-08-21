@@ -6,7 +6,8 @@
 
 % API functions
 -export(
-    [ start_driver/2
+	[ start_driver/2
+	, stop_driver/1
 	] ).
 
 
