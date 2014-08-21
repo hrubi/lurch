@@ -12,6 +12,7 @@
 -export(
 	[ start/0, start_link/0, stop/1
 	, start_device/2, stop_device/2, list_devices/1
+	, poll_device_event/3
 	] ).
 
 % gen_server callbacks
@@ -49,6 +50,10 @@ stop_device( Server, Id ) ->
 list_devices( Server ) ->
 	gen_server:call( Server, list_devices ).
 
+-spec poll_device_event( pid() , device_id(), binary() ) -> { ok, term() } | { error, no_such_device } | { error | no_such_event }.
+poll_device_event( Server, Id, Event ) ->
+	gen_server:call( Server, { poll_device_event, Id, Event } ).
+
 %% ===================================================================
 %% gen_server callbacks
 %% ===================================================================
@@ -56,6 +61,7 @@ list_devices( Server ) ->
 	{ id         :: device_id()
 	, driver     :: binary()
 	, parameters :: [ binary() ]
+	, events	 :: [ binary() ]
 	, port		 :: port()
 	} ).
 
@@ -96,6 +102,20 @@ handle_call( list_devices, _From, State ) ->
 	{ reply, { ok, DeviceList }, State };
 
 
+handle_call( { poll_device_event, DeviceId, Event }, _From, State ) ->
+	Reply = case orddict:find( DeviceId, State#state.devices ) of
+		{ ok, Device } ->
+			case lists:member( Event, Device#device.events ) of
+				true -> { ok, <<"dummy">> };
+				false -> { error, no_such_event }
+			end;
+
+		error -> { error, no_such_device }
+	end,
+	{ reply, Reply, State };
+
+
+
 handle_call( stop, _From, State ) ->
 	{ stop, shutdown, ok, State }.
 
@@ -124,12 +144,14 @@ code_change( _OldVsn, State, _Extra ) ->
 do_start_device( Configuration ) ->
 	Driver = proplists:get_value(driver, Configuration),
 	Parameters = proplists:get_value(parameters, Configuration),
+	Events = proplists:get_value(events, Configuration, []),
 	case lurch_driver_port:start_driver( Driver, Parameters ) of
 		{ ok, Port } ->
 			DeviceId = make_ref( ),
-			Device = #device{ driver = Driver
+			Device = #device{ id = DeviceId
+							, driver = Driver
 							, parameters = Parameters
-							, id = DeviceId
+							, events = Events
 							, port = Port },
 			{ ok, Device };
 		{ error, _ } = Response ->
@@ -145,6 +167,7 @@ device_to_proplist( Device ) ->
 	[ { id, Device#device.id }
 	, { driver, Device#device.driver }
 	, { parameters, Device#device.parameters }
+	, { events, Device#device.events }
 	].
 
 
@@ -155,6 +178,10 @@ device_to_proplist( Device ) ->
 -include_lib( "eunit/include/eunit.hrl" ).
 
 -define( setup( F ), { setup, fun test_start/0, fun test_stop/1, F } ).
+
+-define( DRIVER_NAME, <<"dummy">> ).
+
+-define( EVENT_NAME, <<"event_one">> ).
 
 % Test descriptions
 server_test_( ) ->
@@ -177,6 +204,11 @@ device_list_test_( ) ->
 	, ?setup( fun test_add_list_devices/1 ) }.
 
 
+device_poll_event_test_( ) ->
+	{ "Poll can be made only for events defined in the configuration"
+	, ?setup( fun test_poll_device_event/1 ) }.
+
+
 % Actual tests
 test_is_alive( Pid ) ->
 	[ ?_assert( erlang:is_process_alive( Pid ) ) ].
@@ -184,7 +216,7 @@ test_is_alive( Pid ) ->
 
 test_start_stop_device( Pid ) ->
 	DeviceCount = 2,
-	StartResults = [ start_device( Pid, test_driver_config( ) ) ||
+	StartResults = [ start_device( Pid, dummy_driver_config( ) ) ||
 					_N <- lists:seq( 1, DeviceCount ) ],
 	StopResults = [ stop_device( Pid, element( 2, StartResult ) ) ||
 					StartResult <- StartResults ],
@@ -201,7 +233,7 @@ test_start_device_error( ) ->
 	meck:new( lurch_driver_port, [ ] ),
 	meck:expect( lurch_driver_port, start_driver,
 				 fun( _Driver, _Parameters ) -> { error, enoent } end ),
-	StartResult = start_device( Pid, test_driver_config( ) ),
+	StartResult = start_device( Pid, dummy_driver_config( ) ),
 	Tests = [ ?_assertMatch( { error, _Error }, StartResult ) ],
 	test_stop( Pid ),
 	Tests.
@@ -210,7 +242,7 @@ test_start_device_error( ) ->
 test_add_list_devices( Pid ) ->
 	DeviceCount = 2,
 	StartDeviceOk = fun( ) ->
-		{ ok, DeviceId } = start_device( Pid, test_driver_config() ),
+		{ ok, DeviceId } = start_device( Pid, dummy_driver_config() ),
 		DeviceId
 	end,
 	DeviceIds = [ StartDeviceOk( ) || _N <- lists:seq( 1, DeviceCount ) ],
@@ -220,7 +252,7 @@ test_add_list_devices( Pid ) ->
 	end,
 	[ ?_assertEqual( DeviceCount, length( Result ) )
 	, [ ?_assert( lists:member( Id, DeviceIds ) ) || Id <- GetDeviceFields( id, Result ) ]
-	, [ ?_assertEqual( <<"dummy">>, Driver ) || Driver <- GetDeviceFields( driver, Result ) ]
+	, [ ?_assertEqual( ?DRIVER_NAME, Driver ) || Driver <- GetDeviceFields( driver, Result ) ]
 	].
 
 
@@ -238,9 +270,24 @@ test_stop( Pid ) ->
 	stop( Pid ).
 
 
-test_driver_config( ) ->
-	[ { driver, <<"dummy">> }
+test_poll_device_event( Pid ) ->
+	{ ok, DeviceId } = start_device( Pid, dummy_driver_config( ) ),
+	InvalidDeviceId = make_ref(),
+	InvalidEvent = non_existing_event,
+	Res1 = poll_device_event( Pid, DeviceId, ?EVENT_NAME ),
+	Res2 = poll_device_event( Pid, InvalidDeviceId, ?EVENT_NAME ),
+	Res3 = poll_device_event( Pid, DeviceId, InvalidEvent ),
+	[ ?_assertEqual( { ok, <<"dummy">> }, Res1 )
+	, ?_assertEqual( { error, no_such_device }, Res2 )
+	, ?_assertEqual( { error, no_such_event }, Res3 )
+	].
+
+
+
+dummy_driver_config( ) ->
+	[ { driver, ?DRIVER_NAME }
 	, { parameters, [] }
+	, { events, [ ?EVENT_NAME ] }
 	].
 
 -endif. % TEST
