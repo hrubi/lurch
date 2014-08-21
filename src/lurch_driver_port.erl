@@ -78,26 +78,26 @@ format_cmd( Cmd, Data ) ->
 
 % Test descriptions
 driver_path_test_( ) ->
-	{ "Driver filename sanity checks",
-		[ ?_assertThrow( { error, bad_driver }, driver_path( "/absolute/path" ) )
-		, ?_assertThrow( { error, bad_driver }, driver_path( "dots/../in/path" ) )
-		, ?_assertThrow( { error, bad_driver }, driver_path( "dots/end/.." ) )
+	{ "filename sanity checks",
+		[ { "forbidden absolute path", ?_assertThrow( { error, bad_driver }, driver_path( "/absolute/path" ) ) }
+		, { "forbidden relative path", ?_assertThrow( { error, bad_driver }, driver_path( "dots/../in/path" ) ) }
+		, { "forbidden relative path", ?_assertThrow( { error, bad_driver }, driver_path( "dots/end/.." ) ) }
 		]
 	}.
 
 
 driver_start_stop_test_( ) ->
-	{ "Driver can be started and stopped"
+	{ "start and stop device"
 	, fun test_start_stop_driver/0 }.
 
 
 stuck_driver_test_( ) ->
-	{ "Driver is killed when does not end on its own"
+	{ "kill stuck driver"
 	, fun test_kill_driver/0 }.
 
 
 get_event_test_( ) ->
-	{ "Driver replies when event is requested"
+	{ "reply to event poll"
 	, fun test_get_event/0 }.
 
 % Helper functions
@@ -111,8 +111,8 @@ test_start_stop_driver( ) ->
 	IsPort = erlang:is_port( Port ),
 	stop_driver( Port ),
 	StoppedPortInfo = erlang:port_info( Port ),
-	[ ?_assert( IsPort )
-	, ?_assertEqual( undefined, StoppedPortInfo )
+	[ { "port started", ?_assert( IsPort ) }
+	, { "port stopped", ?_assertEqual( undefined, StoppedPortInfo ) }
 	].
 
 
@@ -120,14 +120,15 @@ test_kill_driver( ) ->
 	{ ok, Port } = start_test_driver( "stuck.sh" ),
 	Pid = erlang:port_info( Port, os_pid ),
 	stop_driver( Port ),
-	[ ?_assertCmdStatus( 1, io_lib:format("kill -0 ~p", [ Pid ] ) ) ].
+	[ { "process killed", ?_assertCmdStatus( 1, io_lib:format("kill -0 ~p", [ Pid ] ) ) }
+	].
 
 
 test_get_event( ) ->
 	{ ok, Port } = start_test_driver( "echo.sh" ),
 	Res = get_event( Port, "SomeEvent" ),
 	ExpData = "EVENT\nSomeEvent\nOK\n",
-	[ ?_assertEqual( { ok, ExpData }, Res )
+	[ { "get event", ?_assertEqual( { ok, ExpData }, Res ) }
 	].
 
 

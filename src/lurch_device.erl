@@ -185,27 +185,27 @@ device_to_proplist( Device ) ->
 
 % Test descriptions
 server_test_( ) ->
-	{ "Server can be started and stopped"
+	{ "start and stop server"
 	, ?setup( fun test_is_alive/1 ) }.
 
 
 device_start_stop_test_( ) ->
-	{ "Device can be started and stopped"
+	{ "start and stop device"
 	, ?setup( fun test_start_stop_device/1 ) }.
 
 
 device_start_error_test_( ) ->
-	{ "Handle device startup error"
+	{ "start device error"
 	, fun test_start_device_error/0 }.
 
 
 device_list_test_( ) ->
-	{ "Devices can be added and listed"
+	{ "add and list devices"
 	, ?setup( fun test_add_list_devices/1 ) }.
 
 
 device_poll_event_test_( ) ->
-	{ "Poll can be made only for events defined in the configuration"
+	{ "poll events"
 	, ?setup( fun test_poll_device_event/1 ) }.
 
 
@@ -220,11 +220,10 @@ test_start_stop_device( Pid ) ->
 					_N <- lists:seq( 1, DeviceCount ) ],
 	StopResults = [ stop_device( Pid, element( 2, StartResult ) ) ||
 					StartResult <- StartResults ],
-	[
-	  ?_assert( lists:all( fun( Res ) -> element( 1, Res ) =:= ok end,
-							StartResults ) )
-	, ?_assert( lists:all( fun( Res ) ->
-							Res =:= ok end, StopResults ) )
+	[ { "start device", ?_assert( lists:all( fun( Res ) -> element( 1, Res ) =:= ok end,
+							StartResults ) ) }
+	, { "stop device", ?_assert( lists:all( fun( Res ) ->
+							Res =:= ok end, StopResults ) ) }
 	].
 
 
@@ -250,9 +249,10 @@ test_add_list_devices( Pid ) ->
 	GetDeviceFields = fun( Field, Devices ) ->
 		[ proplists:get_value( Field, Device ) || Device <- Devices ]
 	end,
-	[ ?_assertEqual( DeviceCount, length( Result ) )
-	, [ ?_assert( lists:member( Id, DeviceIds ) ) || Id <- GetDeviceFields( id, Result ) ]
-	, [ ?_assertEqual( ?DRIVER_NAME, Driver ) || Driver <- GetDeviceFields( driver, Result ) ]
+	[ { "device count", ?_assertEqual( DeviceCount, length( Result ) ) }
+	, [ { "device id", ?_assert( lists:member( Id, DeviceIds ) ) }
+		|| Id <- GetDeviceFields( id, Result ) ]
+	, [ { "driver name", ?_assertEqual( ?DRIVER_NAME, Driver ) } || Driver <- GetDeviceFields( driver, Result ) ]
 	].
 
 
@@ -279,9 +279,9 @@ test_poll_device_event( Pid ) ->
 	Res1 = poll_device_event( Pid, DeviceId, ?EVENT_NAME ),
 	Res2 = poll_device_event( Pid, InvalidDeviceId, ?EVENT_NAME ),
 	Res3 = poll_device_event( Pid, DeviceId, InvalidEvent ),
-	[ ?_assertEqual( { ok, <<"dummy">> }, Res1 )
-	, ?_assertEqual( { error, no_such_device }, Res2 )
-	, ?_assertEqual( { error, no_such_event }, Res3 )
+	[ { "poll event", ?_assertEqual( { ok, <<"dummy">> }, Res1 ) }
+	, { "bad device", ?_assertEqual( { error, no_such_device }, Res2 ) }
+	, { "bad event", ?_assertEqual( { error, no_such_event }, Res3 ) }
 	].
 
 
