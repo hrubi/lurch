@@ -16,14 +16,25 @@
 %% ===================================================================
 
 start_driver( Driver, Parameters ) ->
-	Port = try open_port( { spawn_executable, driver_path( Driver ) },
-					  [ { args, Parameters }
-					  , { line, 8 }
-					  , use_stdio ] )
-		   catch
-			   error:Error -> {error, Error}
-		   end,
-	{ ok, Port }.
+	try Port = open_port( { spawn_executable, driver_path( Driver ) },
+						  [ { args, Parameters }
+						  , { line, 8 }
+						  , use_stdio ] ),
+		io:format("pid: ~p~n", [erlang:port_info(Port, os_pid)]),
+		{ ok, Port }
+	catch
+		error:Error -> {error, Error}
+	end.
+
+
+stop_driver( Port ) ->
+	{ os_pid, Pid } = erlang:port_info( Port, os_pid ),
+	erlang:port_close( Port ),
+	case lurch_os:is_process_alive( Pid ) of
+		true -> lurch_os:kill_process(9, Pid),
+				ok;
+		false -> ok
+	end.
 
 
 driver_path( Driver ) ->
@@ -59,21 +70,36 @@ driver_path_test_( ) ->
 
 
 driver_start_stop_test_( ) ->
-	{ "Driver can be started and stopped",
-	  fun test_start_stop_driver/0 }.
+	{ "Driver can be started and stopped"
+	, fun test_start_stop_driver/0 }.
+
+
+stuck_driver_test_( ) ->
+	{ "Driver is killed when does not end on its own"
+	, fun test_kill_driver/0 }.
 
 
 % Helper functions
-echo_driver( ) -> filename:join( [ "test", "echo.sh" ] ).
+start_test_driver( Name ) ->
+	start_driver( filename:join( ["test", Name ] ), [ ] ).
 
 
 % Actual tests
 test_start_stop_driver( ) ->
-	{ ok, Port } = start_driver( echo_driver( ), [ ]),
-	Tests = [ ?_assert( erlang:is_port( Port ) ) ],
-	% FIXME - use stop_driver here
-	port_close( Port ),
-	Tests.
+	{ ok, Port } = start_test_driver( "echo.sh" ),
+	IsPort = erlang:is_port( Port ),
+	stop_driver( Port ),
+	StoppedPortInfo = erlang:port_info( Port ),
+	[ ?_assert( IsPort )
+	, ?_assertEqual( undefined, StoppedPortInfo )
+	].
+
+
+test_kill_driver( ) ->
+	{ ok, Port } = start_test_driver( "stuck.sh" ),
+	Pid = erlang:port_info( Port, os_pid ),
+	stop_driver( Port ),
+	[ ?_assertCmdStatus( 1, io_lib:format("kill -0 ~p", [ Pid ] ) ) ].
 
 
 -endif. % TEST
