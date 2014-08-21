@@ -3,11 +3,13 @@
 % @doc Provides communication mechanism to/from external driver
 
 -module( lurch_driver_port ).
+-include( "lurch_driver_protocol.hrl" ).
 
 % API functions
 -export(
 	[ start_driver/2
 	, stop_driver/1
+	, get_event/2
 	] ).
 
 -define( DRIVER_DIR, code:lib_dir( lurch, drivers ) ).
@@ -41,6 +43,15 @@ stop_driver( Port ) ->
 	end.
 
 
+-spec get_event( port(), string() ) -> { ok, term() }.
+get_event( Port, Event ) ->
+	{ ok, erlang:port_command( Port, format_cmd( ?EVENT, [ Event ] ) ) }.
+
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
 -spec driver_path( string() ) -> ok.
 driver_path( Driver ) ->
 	case filename:pathtype( Driver ) of
@@ -52,6 +63,11 @@ driver_path( Driver ) ->
 		false -> ok
 	end,
 	filename:join( [ ?DRIVER_DIR, Driver ] ).
+
+
+-spec format_cmd( string(), [ string() ] ) -> string().
+format_cmd( Cmd, Data ) ->
+	string:join( [ Cmd | Data ] ++ ["OK\n"], "\n" ).
 
 
 %% ===================================================================
@@ -80,6 +96,10 @@ stuck_driver_test_( ) ->
 	, fun test_kill_driver/0 }.
 
 
+get_event_test_( ) ->
+	{ "Driver replies when event is requested"
+	, fun test_get_event/0 }.
+
 % Helper functions
 start_test_driver( Name ) ->
 	start_driver( filename:join( ["test", Name ] ), [ ] ).
@@ -101,6 +121,14 @@ test_kill_driver( ) ->
 	Pid = erlang:port_info( Port, os_pid ),
 	stop_driver( Port ),
 	[ ?_assertCmdStatus( 1, io_lib:format("kill -0 ~p", [ Pid ] ) ) ].
+
+
+test_get_event( ) ->
+	{ ok, Port } = start_test_driver( "echo.sh" ),
+	Res = get_event( Port, "SomeEvent" ),
+	ExpData = "EVENT\nSomeEvent\nOK\n",
+	[ ?_assertEqual( { ok, ExpData }, Res )
+	].
 
 
 -endif. % TEST
