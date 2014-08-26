@@ -179,7 +179,7 @@ device_to_proplist( Device ) ->
 -ifdef( TEST ).
 -include_lib( "eunit/include/eunit.hrl" ).
 
--define( setup( F ), { setup, fun test_start/0, fun test_stop/1, F } ).
+-define( setup( F ), { setup, fun test_start/0, fun test_stop/1, fun F/1 } ).
 
 -define( DRIVER_NAME, <<"dummy">> ).
 
@@ -188,12 +188,12 @@ device_to_proplist( Device ) ->
 % Test descriptions
 server_test_( ) ->
 	{ "start and stop server"
-	, ?setup( fun test_is_alive/1 ) }.
+	, ?setup( test_is_alive ) }.
 
 
 device_start_stop_test_( ) ->
 	{ "start and stop device"
-	, ?setup( fun test_start_stop_device/1 ) }.
+	, ?setup( test_start_stop_device ) }.
 
 
 device_start_error_test_( ) ->
@@ -203,12 +203,28 @@ device_start_error_test_( ) ->
 
 device_list_test_( ) ->
 	{ "add and list devices"
-	, ?setup( fun test_add_list_devices/1 ) }.
+	, ?setup( test_add_list_devices ) }.
 
 
 device_poll_event_test_( ) ->
 	{ "poll events"
-	, ?setup( fun test_poll_device_event/1 ) }.
+	, ?setup( test_poll_device_event ) }.
+
+
+% setup functions
+test_start( ) ->
+	{ ok, Pid } = start( ),
+	meck:new( lurch_driver_port, [ ] ),
+	meck:expect( lurch_driver_port, start_driver,
+				 fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
+	meck:expect( lurch_driver_port, stop_driver,
+				 fun( Port ) -> ok end ),
+	Pid.
+
+
+test_stop( Pid ) ->
+	meck:unload( lurch_driver_port ),
+	stop( Pid ).
 
 
 % Actual tests
@@ -259,21 +275,6 @@ test_add_list_devices( Pid ) ->
 
 
 % Helper functions
-test_start( ) ->
-	{ ok, Pid } = start( ),
-	meck:new( lurch_driver_port, [ ] ),
-	meck:expect( lurch_driver_port, start_driver,
-				 fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
-	meck:expect( lurch_driver_port, stop_driver,
-				 fun( Port ) -> ok end ),
-	Pid.
-
-
-test_stop( Pid ) ->
-	meck:unload( lurch_driver_port ),
-	stop( Pid ).
-
-
 test_poll_device_event( Pid ) ->
 	{ ok, DeviceId } = start_device( Pid, dummy_driver_config( ) ),
 	InvalidDeviceId = make_ref(),
