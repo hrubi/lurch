@@ -86,7 +86,7 @@ driver_path_test_( ) ->
 
 
 driver_start_stop_test_( ) ->
-	{ "start and stop device"
+	{ "start and stop driver"
 	, fun test_start_stop_driver/0 }.
 
 

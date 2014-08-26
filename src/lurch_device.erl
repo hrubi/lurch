@@ -198,7 +198,7 @@ device_start_stop_test_( ) ->
 
 device_start_error_test_( ) ->
 	{ "start device error"
-	, fun test_start_device_error/0 }.
+	, ?setup( test_start_device_error ) }.
 
 
 device_list_test_( ) ->
@@ -229,7 +229,7 @@ test_stop( Pid ) ->
 
 % Actual tests
 test_is_alive( Pid ) ->
-	[ ?_assert( erlang:is_process_alive( Pid ) ) ].
+	[ { "server alive" , ?_assert( erlang:is_process_alive( Pid ) ) } ].
 
 
 test_start_stop_device( Pid ) ->
@@ -245,15 +245,12 @@ test_start_stop_device( Pid ) ->
 	].
 
 
-test_start_device_error( ) ->
-	{ ok, Pid } = start( ),
-	meck:new( lurch_driver_port, [ ] ),
+test_start_device_error( Pid ) ->
 	meck:expect( lurch_driver_port, start_driver,
 				 fun( _Driver, _Parameters ) -> { error, enoent } end ),
 	StartResult = start_device( Pid, dummy_driver_config( ) ),
-	Tests = [ ?_assertMatch( { error, _Error }, StartResult ) ],
-	test_stop( Pid ),
-	Tests.
+	[ { "error propagated", ?_assertMatch( { error, _Error }, StartResult ) } ].
+
 
 
 test_add_list_devices( Pid ) ->
