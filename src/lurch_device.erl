@@ -84,8 +84,8 @@ handle_call( { start_device, Configuration }, _From, State ) ->
 				NewState = State#state{ devices = Devices },
 				{ reply, { ok, Device#device.id }, NewState };
 
-		{ error, Reason } ->
-			{ reply, { error, Reason }, State }
+		{ error, _ } = Error ->
+			{ reply, Error, State }
 	end;
 
 
@@ -160,8 +160,8 @@ do_start_device( Configuration ) ->
 							, events = Events
 							, port = Port },
 			{ ok, Device };
-		{ error, _ } = Response ->
-			Response
+		{ error, _ } = Error ->
+			Error
 	end.
 
 

@@ -25,7 +25,6 @@ start_driver( Driver, Parameters ) ->
 						  [ { args, Parameters }
 						  , { line, 8 }
 						  , use_stdio ] ),
-		io:format("pid: ~p~n", [erlang:port_info(Port, os_pid)]),
 		{ ok, Port }
 	catch
 		error:Error -> {error, Error}
