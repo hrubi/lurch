@@ -81,17 +81,17 @@ driver_path_test_() ->
 
 driver_start_stop_test_() ->
     { "start and stop driver"
-    , fun test_start_stop_driver/0 }.
+    , test_start_stop_driver() }.
 
 
 stuck_driver_test_() ->
     { "kill stuck driver"
-    , fun test_kill_driver/0 }.
+    , test_kill_driver() }.
 
 
 get_event_test_() ->
     { "reply to event poll"
-    , fun test_get_event/0 }.
+    , test_get_event() }.
 
 % Helper functions
 start_test_driver( Name ) ->
