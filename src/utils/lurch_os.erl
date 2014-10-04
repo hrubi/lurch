@@ -5,31 +5,31 @@
 -module( lurch_os ).
 
 -export(
-	[ cmd/1
-	, is_process_alive/1
-	, kill_process/2
-	, safe_relative_path/1
-	] ).
+    [ cmd/1
+    , is_process_alive/1
+    , kill_process/2
+    , safe_relative_path/1
+    ] ).
 
 
 -spec cmd( string() ) -> { integer(), string() }.
 cmd( Command ) ->
-	eunit_lib:command( lists:flatten( Command ) ).
+    eunit_lib:command( lists:flatten( Command ) ).
 
 -spec kill_process( integer(), integer() ) -> ok | { error, { integer(), string() } }.
 kill_process( Signal, Pid ) ->
-	{ Ret, Out } = cmd( io_lib:format( "kill -s ~p ~p", [ Signal, Pid ] ) ),
-	case Ret of
-		0 -> ok;
-		Ret -> { error, { Ret, Out } }
-	end.
+    { Ret, Out } = cmd( io_lib:format( "kill -s ~p ~p", [ Signal, Pid ] ) ),
+    case Ret of
+        0 -> ok;
+        Ret -> { error, { Ret, Out } }
+    end.
 
 -spec is_process_alive( integer() ) -> boolean().
 is_process_alive( Pid ) ->
-	case kill_process( 0, Pid ) of
-		ok -> true;
-		_ -> false
-	end.
+    case kill_process( 0, Pid ) of
+        ok -> true;
+        _ -> false
+    end.
 
 %% Taken from mochiweb_util.erl
 %% @doc Inspired by Python 2.5's str.partition:
@@ -37,30 +37,30 @@ is_process_alive( Pid ) ->
 %%      partition("foo", "/") = {"foo", "", ""}.
 -spec partition( string(), string() ) -> { string, [], [] } | { string(), string(), string() }.
 partition(String, Sep) ->
-	case partition(String, Sep, []) of
-		undefined ->
-			{String, "", ""};
-		Result ->
-			Result
-	end.
+    case partition(String, Sep, []) of
+        undefined ->
+            {String, "", ""};
+        Result ->
+            Result
+    end.
 
 partition("", _Sep, _Acc) ->
-	undefined;
+    undefined;
 partition(S, Sep, Acc) ->
-	case partition2(S, Sep) of
-		undefined ->
-			[C | Rest] = S,
-			partition(Rest, Sep, [C | Acc]);
-		Rest ->
-			{lists:reverse(Acc), Sep, Rest}
-	end.
+    case partition2(S, Sep) of
+        undefined ->
+            [C | Rest] = S,
+            partition(Rest, Sep, [C | Acc]);
+        Rest ->
+            {lists:reverse(Acc), Sep, Rest}
+    end.
 
 partition2(Rest, "") ->
-	Rest;
+    Rest;
 partition2([C | R1], [C | R2]) ->
-	partition2(R1, R2);
+    partition2(R1, R2);
 partition2(_S, _Sep) ->
-	undefined.
+    undefined.
 
 %% Taken from mochiweb_util.erl
 %% @doc Return the reduced version of a relative path or throws an exception if
@@ -68,31 +68,31 @@ partition2(_S, _Sep) ->
 %%      will result in a subdirectory of the absolute path.
 -spec safe_relative_path( string() ) -> string().
 safe_relative_path("/" ++ _) ->
-	undefined;
+    undefined;
 safe_relative_path(P) ->
-	safe_relative_path(P, []).
+    safe_relative_path(P, []).
 
 safe_relative_path("", Acc) ->
-	case Acc of
-		[] ->
-			"";
-		_ ->
-			string:join(lists:reverse(Acc), "/")
-	end;
+    case Acc of
+        [] ->
+            "";
+        _ ->
+            string:join(lists:reverse(Acc), "/")
+    end;
 safe_relative_path(P, Acc) ->
-	case partition(P, "/") of
-		{"", "/", _} ->
-			%% /foo or foo//bar
-			undefined;
-		{"..", _, _} when Acc =:= [] ->
-			undefined;
-		{"..", _, Rest} ->
-			safe_relative_path(Rest, tl(Acc));
-		{Part, "/", ""} ->
-			safe_relative_path("", ["", Part | Acc]);
-		{Part, _, Rest} ->
-			safe_relative_path(Rest, [Part | Acc])
-	end.
+    case partition(P, "/") of
+        {"", "/", _} ->
+            %% /foo or foo//bar
+            undefined;
+        {"..", _, _} when Acc =:= [] ->
+            undefined;
+        {"..", _, Rest} ->
+            safe_relative_path(Rest, tl(Acc));
+        {Part, "/", ""} ->
+            safe_relative_path("", ["", Part | Acc]);
+        {Part, _, Rest} ->
+            safe_relative_path(Rest, [Part | Acc])
+    end.
 
 
 %% ===================================================================
@@ -102,28 +102,28 @@ safe_relative_path(P, Acc) ->
 -include_lib( "eunit/include/eunit.hrl" ).
 
 partition_test_() ->
-	{ "partition",
-		[ ?_assertEqual( { "foo", "", "" }, partition( "foo", "/" ) )
-		, ?_assertEqual( { "foo", "/", "bar" }, partition( "foo/bar", "/" ) )
-		, ?_assertEqual( { "foo", "/", "" }, partition( "foo/", "/" ) )
-		, ?_assertEqual( { "", "/", "bar" }, partition( "/bar", "/" ) )
-		, ?_assertEqual( { "f", "oo/ba", "r" }, partition( "foo/bar", "oo/ba" ) )
-		] }.
+    { "partition",
+        [ ?_assertEqual( { "foo", "", "" }, partition( "foo", "/" ) )
+        , ?_assertEqual( { "foo", "/", "bar" }, partition( "foo/bar", "/" ) )
+        , ?_assertEqual( { "foo", "/", "" }, partition( "foo/", "/" ) )
+        , ?_assertEqual( { "", "/", "bar" }, partition( "/bar", "/" ) )
+        , ?_assertEqual( { "f", "oo/ba", "r" }, partition( "foo/bar", "oo/ba" ) )
+        ] }.
 
 safe_relative_path_test_() ->
-	{ "safe relative path",
-		[ ?_assertEqual( "foo", safe_relative_path( "foo" ) )
-		, ?_assertEqual( "foo/", safe_relative_path( "foo/" ) )
-		, ?_assertEqual( "foo", safe_relative_path( "foo/bar/.." ) )
-		, ?_assertEqual( "bar", safe_relative_path( "foo/../bar" ) )
-		, ?_assertEqual( "bar/", safe_relative_path( "foo/../bar/" ) )
-		, ?_assertEqual( "", safe_relative_path( "foo/.." ) )
-		, ?_assertEqual( "", safe_relative_path( "foo/../" ) )
-		, ?_assertEqual( undefined, safe_relative_path( "/foo" ) )
-		, ?_assertEqual( undefined, safe_relative_path( "../foo" ) )
-		, ?_assertEqual( undefined, safe_relative_path( "foo/../.." ) )
-		, ?_assertEqual( undefined, safe_relative_path( "foo//" ) )
-		, ?_assertError( { badmatch, _ }, safe_relative_path( <<"../foo">> ) )
-		] }.
+    { "safe relative path",
+        [ ?_assertEqual( "foo", safe_relative_path( "foo" ) )
+        , ?_assertEqual( "foo/", safe_relative_path( "foo/" ) )
+        , ?_assertEqual( "foo", safe_relative_path( "foo/bar/.." ) )
+        , ?_assertEqual( "bar", safe_relative_path( "foo/../bar" ) )
+        , ?_assertEqual( "bar/", safe_relative_path( "foo/../bar/" ) )
+        , ?_assertEqual( "", safe_relative_path( "foo/.." ) )
+        , ?_assertEqual( "", safe_relative_path( "foo/../" ) )
+        , ?_assertEqual( undefined, safe_relative_path( "/foo" ) )
+        , ?_assertEqual( undefined, safe_relative_path( "../foo" ) )
+        , ?_assertEqual( undefined, safe_relative_path( "foo/../.." ) )
+        , ?_assertEqual( undefined, safe_relative_path( "foo//" ) )
+        , ?_assertError( { badmatch, _ }, safe_relative_path( <<"../foo">> ) )
+        ] }.
 
 -endif. % TEST
