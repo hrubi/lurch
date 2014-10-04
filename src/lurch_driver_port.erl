@@ -51,17 +51,12 @@ get_event( Port, Event ) ->
 %% Internal functions
 %% ===================================================================
 
--spec driver_path( binary() ) -> string().
+-spec driver_path( string() ) -> string().
 driver_path( Driver ) ->
-	case filename:pathtype( Driver ) of
-		relative -> ok;
-		_ -> throw( { error, bad_driver } )
-	end,
-	case lists:member( "..", filename:split( Driver ) ) of
-		true -> throw( { error, bad_driver } );
-		false -> ok
-	end,
-	filename:join( [ ?DRIVER_DIR, Driver ] ).
+	case lurch_os:safe_relative_path( Driver ) of
+		undefined -> throw( unsafe_relative_path );
+		Path -> filename:join( [ ?DRIVER_DIR, Path ] )
+	end.
 
 
 -spec format_cmd( string(), [ string() ] ) -> string().
@@ -75,15 +70,14 @@ format_cmd( Cmd, Data ) ->
 -ifdef( TEST ).
 -include_lib( "eunit/include/eunit.hrl" ).
 
-% Test descriptions
-driver_path_test_( ) ->
-	{ "filename sanity checks",
-		[ { "forbidden absolute path", ?_assertThrow( { error, bad_driver }, driver_path( <<"/absolute/path">> ) ) }
-		, { "forbidden relative path", ?_assertThrow( { error, bad_driver }, driver_path( <<"dots/../in/path">> ) ) }
-		, { "forbidden relative path", ?_assertThrow( { error, bad_driver }, driver_path( <<"dots/end/..">> ) ) }
-		]
-	}.
-
+driver_path_test_() ->
+	{ "driver path",
+		{ setup,
+			fun mock_lurch_os/0,
+			fun mock_lurch_os_stop/1,
+			[ ?_assert( is_list( driver_path( safe ) ) )
+			, ?_assertThrow( unsafe_relative_path, driver_path( unsafe ) )
+			] } }.
 
 driver_start_stop_test_( ) ->
 	{ "start and stop driver"
@@ -102,6 +96,19 @@ get_event_test_( ) ->
 % Helper functions
 start_test_driver( Name ) ->
 	start_driver( filename:join( ["test", Name ] ), [ ] ).
+
+mock_lurch_os() ->
+	meck:new( lurch_os, [ ] ),
+	meck:expect( lurch_os, safe_relative_path,
+				fun( Path ) ->
+					case Path of
+						safe -> "safe";
+						unsafe -> undefined
+					end
+				end ).
+
+mock_lurch_os_stop( _ ) ->
+	meck:unload( lurch_os ).
 
 
 % Actual tests
