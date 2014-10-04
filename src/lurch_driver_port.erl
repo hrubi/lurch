@@ -79,17 +79,17 @@ driver_path_test_() ->
 			, ?_assertThrow( unsafe_relative_path, driver_path( unsafe ) )
 			] } }.
 
-driver_start_stop_test_( ) ->
+driver_start_stop_test_() ->
 	{ "start and stop driver"
 	, fun test_start_stop_driver/0 }.
 
 
-stuck_driver_test_( ) ->
+stuck_driver_test_() ->
 	{ "kill stuck driver"
 	, fun test_kill_driver/0 }.
 
 
-get_event_test_( ) ->
+get_event_test_() ->
 	{ "reply to event poll"
 	, fun test_get_event/0 }.
 
@@ -112,7 +112,7 @@ mock_lurch_os_stop( _ ) ->
 
 
 % Actual tests
-test_start_stop_driver( ) ->
+test_start_stop_driver() ->
 	{ ok, Port } = start_test_driver( "echo.sh" ),
 	IsPort = erlang:is_port( Port ),
 	stop_driver( Port ),
@@ -122,7 +122,7 @@ test_start_stop_driver( ) ->
 	].
 
 
-test_kill_driver( ) ->
+test_kill_driver() ->
 	{ ok, Port } = start_test_driver( "stuck.sh" ),
 	Pid = erlang:port_info( Port, os_pid ),
 	stop_driver( Port ),
@@ -130,7 +130,7 @@ test_kill_driver( ) ->
 	].
 
 
-test_get_event( ) ->
+test_get_event() ->
 	{ ok, Port } = start_test_driver( "echo.sh" ),
 	Res = get_event( Port, "SomeEvent" ),
 	ExpData = "EVENT\nSomeEvent\nOK\n",
