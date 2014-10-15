@@ -35,8 +35,8 @@ start_driver( Driver, Parameters ) ->
 stop_driver( Port ) ->
     { os_pid, Pid } = erlang:port_info( Port, os_pid ),
     erlang:port_close( Port ),
-    case lurch_os:is_process_alive( Pid ) of
-        true -> lurch_os:kill_process(9, Pid),
+    case lurch_os:is_os_process_alive( Pid ) of
+        true -> lurch_os:kill_os_process(9, Pid),
                 ok;
         false -> ok
     end.
@@ -124,9 +124,10 @@ test_start_stop_driver() ->
 
 test_kill_driver() ->
     { ok, Port } = start_test_driver( "stuck.sh" ),
-    Pid = erlang:port_info( Port, os_pid ),
+    { os_pid, OsPid } = erlang:port_info( Port, os_pid ),
     stop_driver( Port ),
-    [ { "process killed", ?_assertCmdStatus( 1, io_lib:format("kill -0 ~p", [ Pid ] ) ) }
+    IsOsPidAliveCmd = lists:flatten( io_lib:format("kill -0 ~b", [ OsPid ] ) ),
+    [ { "process killed", ?_assertCmdStatus( 1, IsOsPidAliveCmd ) }
     ].
 
 
