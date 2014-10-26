@@ -13,6 +13,11 @@
     ] ).
 
 -define( DRIVER_DIR, code:lib_dir( lurch, drivers ) ).
+-ifndef( TEST ).
+-define( DRIVER_TIMEOUT, 5000 ).
+-else.
+-define( DRIVER_TIMEOUT, 100 ).
+-endif. % TEST
 
 
 %% ===================================================================
@@ -44,7 +49,32 @@ stop_driver( Port ) ->
 
 -spec get_event( port(), string() ) -> { ok, term() }.
 get_event( Port, Event ) ->
-    { ok, erlang:port_command( Port, format_cmd( ?EVENT, [ Event ] ) ) }.
+    true = erlang:port_command( Port, format_cmd( ?EVENT, [ Event ] ) ),
+    get_event_acc( Port, [], [], ?DRIVER_TIMEOUT ).
+
+-spec get_event_acc( port(), list(), list(), integer() ) -> list().
+get_event_acc( Port, DataAcc, LineAcc, Timeout ) ->
+    Start = now(),
+    receive
+        { Port, { data, { eol, "OK" } } } ->
+            Result = lists:map( fun lists:flatten/1, lists:reverse(DataAcc)),
+            { ok, Result };
+
+        { Port, { data, { eol, Data } } } ->
+            Line = lists:reverse( [ Data | LineAcc ] ),
+            ResDataAcc = [ Line | DataAcc ],
+            Duration = timer:now_diff( Start, now() ),
+            get_event_acc( Port, ResDataAcc, [], Timeout - Duration );
+
+        { Port, { data, { noeol, Data } } } ->
+            Duration = timer:now_diff( Start, now() ),
+            get_event_acc( Port, DataAcc, [ Data | LineAcc ], Timeout - Duration )
+
+    after
+        ?DRIVER_TIMEOUT -> throw( { timeout, "Timed out when waiting for event" } )
+    end.
+
+
 
 
 %% ===================================================================
@@ -93,6 +123,10 @@ get_event_test_() ->
     { "reply to event poll"
     , test_get_event() }.
 
+timeout_test_() ->
+    { "test driver timeout"
+    , test_timeout() }.
+
 % Helper functions
 start_test_driver( Name ) ->
     start_driver( filename:join( ["test", Name ] ), [ ] ).
@@ -134,9 +168,22 @@ test_kill_driver() ->
 test_get_event() ->
     { ok, Port } = start_test_driver( "echo.sh" ),
     Res = get_event( Port, "SomeEvent" ),
-    ExpData = "EVENT\nSomeEvent\nOK\n",
+    ExpData = [ "EVENT", "SomeEvent" ],
     [ { "get event", ?_assertEqual( { ok, ExpData }, Res ) }
     ].
 
+test_timeout() ->
+    { ok, Port } = start_test_driver( "stuck.sh" ),
+    [ { "driver timeout"
+      , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
+    , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
+    ].
+
+test_timeout2() ->
+    { ok, Port } = start_test_driver( "garbage.sh" ),
+    [ { "driver timeout"
+      , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
+    , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
+    ].
 
 -endif. % TEST
