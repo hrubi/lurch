@@ -122,22 +122,44 @@ driver_path_test_() ->
             ] } }.
 
 driver_start_stop_test_() ->
-    { "start and stop driver"
-    , test_start_stop_driver() }.
+    { ok, Port } = start_test_driver( "echo.sh" ),
+    IsPort = erlang:is_port( Port ),
+    stop_driver( Port ),
+    StoppedPortInfo = erlang:port_info( Port ),
+    [ { "port started", ?_assert( IsPort ) }
+    , { "port stopped", ?_assertEqual( undefined, StoppedPortInfo ) }
+    ].
 
 
 stuck_driver_test_() ->
-    { "kill stuck driver"
-    , test_kill_driver() }.
+    { ok, Port } = start_test_driver( "stuck.sh" ),
+    { os_pid, OsPid } = erlang:port_info( Port, os_pid ),
+    stop_driver( Port ),
+    IsOsPidAliveCmd = lists:flatten( io_lib:format("kill -0 ~b", [ OsPid ] ) ),
+    [ { "process killed", ?_assertCmdStatus( 1, IsOsPidAliveCmd ) }
+    ].
 
 
 get_event_test_() ->
-    { "reply to event poll"
-    , test_get_event() }.
+    { ok, Port } = start_test_driver( "echo.sh" ),
+    Res = get_event( Port, "SomeEvent" ),
+    ExpData = [ "EVENT", "SomeEvent" ],
+    [ { "get event", ?_assertEqual( { ok, ExpData }, Res ) }
+    ].
 
 timeout_test_() ->
-    { "test driver timeout"
-    , test_timeout() }.
+    { ok, Port } = start_test_driver( "stuck.sh" ),
+    [ { "driver timeout"
+      , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
+    , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
+    ].
+
+timeout2_test_() ->
+    { ok, Port } = start_test_driver( "garbage.sh" ),
+    [ { "driver timeout"
+      , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
+    , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
+    ].
 
 % Helper functions
 start_test_driver( Name ) ->
@@ -155,47 +177,5 @@ mock_lurch_os() ->
 
 mock_lurch_os_stop( _ ) ->
     meck:unload( lurch_os ).
-
-
-% Actual tests
-test_start_stop_driver() ->
-    { ok, Port } = start_test_driver( "echo.sh" ),
-    IsPort = erlang:is_port( Port ),
-    stop_driver( Port ),
-    StoppedPortInfo = erlang:port_info( Port ),
-    [ { "port started", ?_assert( IsPort ) }
-    , { "port stopped", ?_assertEqual( undefined, StoppedPortInfo ) }
-    ].
-
-
-test_kill_driver() ->
-    { ok, Port } = start_test_driver( "stuck.sh" ),
-    { os_pid, OsPid } = erlang:port_info( Port, os_pid ),
-    stop_driver( Port ),
-    IsOsPidAliveCmd = lists:flatten( io_lib:format("kill -0 ~b", [ OsPid ] ) ),
-    [ { "process killed", ?_assertCmdStatus( 1, IsOsPidAliveCmd ) }
-    ].
-
-
-test_get_event() ->
-    { ok, Port } = start_test_driver( "echo.sh" ),
-    Res = get_event( Port, "SomeEvent" ),
-    ExpData = [ "EVENT", "SomeEvent" ],
-    [ { "get event", ?_assertEqual( { ok, ExpData }, Res ) }
-    ].
-
-test_timeout() ->
-    { ok, Port } = start_test_driver( "stuck.sh" ),
-    [ { "driver timeout"
-      , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
-    , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
-    ].
-
-test_timeout2() ->
-    { ok, Port } = start_test_driver( "garbage.sh" ),
-    [ { "driver timeout"
-      , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
-    , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
-    ].
 
 -endif. % TEST
