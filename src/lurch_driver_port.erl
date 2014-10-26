@@ -26,6 +26,7 @@
 
 -spec start_driver( binary(), [ binary() ] ) -> { ok, port() } | { error, term() }.
 start_driver( Driver, Parameters ) ->
+    % TODO - error logging
     try Port = open_port( { spawn_executable, driver_path( Driver ) },
                           [ { args, Parameters }
                           , { line, 8 }
@@ -63,17 +64,28 @@ get_event_acc( Port, DataAcc, LineAcc, Timeout ) ->
         { Port, { data, { eol, Data } } } ->
             Line = lists:reverse( [ Data | LineAcc ] ),
             ResDataAcc = [ Line | DataAcc ],
-            Duration = timer:now_diff( Start, now() ),
-            get_event_acc( Port, ResDataAcc, [], Timeout - Duration );
+            get_event_acc(
+              Port, ResDataAcc, [],
+              remaining_timeout( Timeout, Start )
+            );
 
         { Port, { data, { noeol, Data } } } ->
-            Duration = timer:now_diff( Start, now() ),
-            get_event_acc( Port, DataAcc, [ Data | LineAcc ], Timeout - Duration )
+            get_event_acc(
+              Port, DataAcc, [ Data | LineAcc ],
+              remaining_timeout( Timeout, Start )
+            )
 
     after
-        ?DRIVER_TIMEOUT -> throw( { timeout, "Timed out when waiting for event" } )
+        Timeout -> throw( { timeout, "Timed out when waiting for event" } )
     end.
 
+-spec remaining_timeout( integer(), erlang:timestamp() ) -> integer().
+remaining_timeout( Timeout, Start ) ->
+    Remaining = Timeout - ( timer:now_diff( now(), Start ) div 1000 ),
+    case Remaining of
+        X when X >= 0 -> X;
+        X when X  < 0 -> 0
+    end.
 
 
 
