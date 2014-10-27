@@ -63,7 +63,7 @@ poll_device_event( Server, Id, Event ) ->
     , driver     :: binary()
     , parameters :: [ binary() ]
     , events     :: [ binary() ]
-    , port         :: port()
+    , pid        :: pid()
     } ).
 
 -record( state,
@@ -92,7 +92,7 @@ handle_call( { start_device, Configuration }, _From, State ) ->
 handle_call( { stop_device, DeviceId }, _From, State ) ->
     case orddict:find( DeviceId, State#state.devices ) of
         { ok, Device } ->
-            lurch_driver_port:stop_driver( Device#device.port ),
+            lurch_driver_port:stop( Device#device.pid ),
             NewDevices = orddict:erase( DeviceId, State#state.devices ),
             NewState = State#state{ devices = NewDevices },
             { reply, ok, NewState };
@@ -151,14 +151,14 @@ do_start_device( Configuration ) ->
     Driver = proplists:get_value(driver, Configuration),
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
-    case lurch_driver_port:start_driver( Driver, Parameters ) of
-        { ok, Port } ->
+    case lurch_driver_port:start( Driver, Parameters ) of
+        { ok, Pid } ->
             DeviceId = make_ref( ),
             Device = #device{ id = DeviceId
                             , driver = Driver
                             , parameters = Parameters
                             , events = Events
-                            , port = Port },
+                            , pid = Pid },
             { ok, Device };
         { error, _ } = Error ->
             Error
@@ -215,9 +215,9 @@ device_poll_event_test_( ) ->
 test_start( ) ->
     { ok, Pid } = start( ),
     meck:new( lurch_driver_port, [] ),
-    meck:expect( lurch_driver_port, start_driver,
+    meck:expect( lurch_driver_port, start,
                  fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
-    meck:expect( lurch_driver_port, stop_driver,
+    meck:expect( lurch_driver_port, stop,
                  fun( Port ) -> ok end ),
     Pid.
 
@@ -246,7 +246,7 @@ test_start_stop_device( Pid ) ->
 
 
 test_start_device_error( Pid ) ->
-    meck:expect( lurch_driver_port, start_driver,
+    meck:expect( lurch_driver_port, start,
                  fun( _Driver, _Parameters ) -> { error, enoent } end ),
     StartResult = start_device( Pid, dummy_driver_config( ) ),
     [ { "error propagated", ?_assertMatch( { error, _Error }, StartResult ) } ].

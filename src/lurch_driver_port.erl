@@ -3,14 +3,17 @@
 % @doc Provides communication mechanism to/from external driver
 
 -module( lurch_driver_port ).
--include( "lurch_driver_protocol.hrl" ).
 
 % API functions
 -export(
-    [ start_driver/2
-    , stop_driver/1
-    , get_event/2
+    [ start/2
+    , start_link/2
+    , stop/1
+    , request_event/2
+    , request_event_async/2
     ] ).
+
+-include( "lurch_driver_protocol.hrl" ).
 
 -define( DRIVER_DIR, code:lib_dir( lurch, drivers ) ).
 -ifndef( TEST ).
@@ -24,7 +27,69 @@
 %% API functions
 %% ===================================================================
 
--spec start_driver( binary(), [ binary() ] ) -> { ok, port() } | { error, term() }.
+-spec start( binary(), [ binary() ] ) -> { ok, pid() }.
+start( Driver, Parameters ) ->
+    Pid = spawn( fun() -> enter_loop( Driver, Parameters ) end ),
+    { ok, Pid }.
+
+-spec start_link( binary(), [ binary() ] ) -> { ok, pid() }.
+start_link( Driver, Parameters ) ->
+    Pid = spawn_link( fun() -> enter_loop( Driver, Parameters ) end ),
+    { ok, Pid }.
+
+-spec stop( pid() ) -> ok | { error, timeout }.
+stop( Pid ) ->
+    { From, To } = from_to( self(), Pid ),
+    Pid ! { stop, From },
+    receive
+        { stopped, To } -> ok
+    after
+        ?DRIVER_TIMEOUT -> { error, timeout }
+    end.
+
+-spec request_event( pid(), string() ) -> { ok, term() } | { error, timeout }.
+request_event( Pid, Event ) ->
+    { From, To } = from_to( self(), Pid ),
+    Pid ! { { get_event,  Event }, From },
+    receive
+        { { event, Result }, To } -> Result
+    after
+        ?DRIVER_TIMEOUT -> { error, timeout }
+    end.
+
+-spec request_event_async( pid(), string() ) -> { ok, { pid(), reference() } }.
+request_event_async( Pid, Event ) ->
+    { From, To } = from_to( self(), Pid ),
+    Pid ! { { get_event, Event }, From },
+    { ok, To }.
+
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
+from_to( From, To ) ->
+    Tag = make_ref(),
+    { { From, Tag }, { To, Tag } }.
+
+-spec enter_loop( binary(), [ binary() ] ) -> no_return().
+enter_loop( Driver, Parameters ) ->
+    { ok, Port } = start_driver( Driver, Parameters ),
+    receive_loop( Port ).
+
+-spec receive_loop( port() ) -> ok.
+receive_loop( Port ) ->
+    receive
+        { stop, { Pid, Tag } } ->
+            stop_driver( Port ),
+            Pid ! { stopped, { self(), Tag } };
+
+        { { get_event, Event }, { Pid, Tag } } ->
+            Pid ! { { event, get_event( Port, Event ) }, { self(), Tag } },
+            receive_loop( Port )
+    end.
+
+-spec start_driver( binary(), [ binary() ] ) -> { ok, port() }.
 start_driver( Driver, Parameters ) ->
     % TODO - error logging
     try Port = open_port( { spawn_executable, driver_path( Driver ) },
@@ -33,7 +98,7 @@ start_driver( Driver, Parameters ) ->
                           , use_stdio ] ),
         { ok, Port }
     catch
-        error:Error -> {error, Error}
+        error:Error -> { error, Error }
     end.
 
 
@@ -88,11 +153,6 @@ remaining_timeout( Timeout, Start ) ->
     end.
 
 
-
-%% ===================================================================
-%% Internal functions
-%% ===================================================================
-
 -spec driver_path( string() ) -> string().
 driver_path( Driver ) ->
     case lurch_os:safe_relative_path( Driver ) of
@@ -112,6 +172,9 @@ format_cmd( Cmd, Data ) ->
 -ifdef( TEST ).
 -include_lib( "eunit/include/eunit.hrl" ).
 
+
+% Driver tests - lower level
+
 driver_path_test_() ->
     { "driver path",
         { setup,
@@ -120,6 +183,7 @@ driver_path_test_() ->
             [ ?_assert( is_list( driver_path( safe ) ) )
             , ?_assertThrow( unsafe_relative_path, driver_path( unsafe ) )
             ] } }.
+
 
 driver_start_stop_test_() ->
     { ok, Port } = start_test_driver( "echo.sh" ),
@@ -130,8 +194,7 @@ driver_start_stop_test_() ->
     , { "port stopped", ?_assertEqual( undefined, StoppedPortInfo ) }
     ].
 
-
-stuck_driver_test_() ->
+driver_stuck_test_() ->
     { ok, Port } = start_test_driver( "stuck.sh" ),
     { os_pid, OsPid } = erlang:port_info( Port, os_pid ),
     stop_driver( Port ),
@@ -140,30 +203,70 @@ stuck_driver_test_() ->
     ].
 
 
-get_event_test_() ->
+driver_get_event_test_() ->
     { ok, Port } = start_test_driver( "echo.sh" ),
     Res = get_event( Port, "SomeEvent" ),
     ExpData = [ "EVENT", "SomeEvent" ],
     [ { "get event", ?_assertEqual( { ok, ExpData }, Res ) }
     ].
 
-timeout_test_() ->
+
+driver_timeout_test_() ->
     { ok, Port } = start_test_driver( "stuck.sh" ),
     [ { "driver timeout"
       , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
     , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
     ].
 
-timeout2_test_() ->
+
+driver_timeout2_test_() ->
     { ok, Port } = start_test_driver( "garbage.sh" ),
     [ { "driver timeout"
       , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
     , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
     ].
 
+
+% server tests - API
+
+server_scenario_test_() ->
+    { ok, Pid } = start_test_server( "echo.sh" ),
+    ProcAlive = is_process_alive( Pid ),
+
+    Res1 = request_event( Pid, "SomeEvent" ),
+    { ok, From } = request_event_async( Pid, "SomeEvent" ),
+    Res2 = receive
+        { { event, E }, From } -> E
+    after
+        ?DRIVER_TIMEOUT -> timeout
+    end,
+
+    Res3 = stop( Pid ),
+    ProcAlive2 = is_process_alive( Pid ),
+
+    ExpEventRes = { ok, [ "EVENT", "SomeEvent" ] },
+
+    [ { "server started", ?_assert( ProcAlive ) }
+    , { "receive sync event",
+        ?_assertEqual( ExpEventRes, Res1 ) }
+    , { "receive async event",
+        ?_assertEqual( ExpEventRes, Res2 ) }
+    , { "server stopped", ?_assertNot( ProcAlive2 ) }
+    ].
+
+
 % Helper functions
+test_driver_path( Name ) ->
+    filename:join( [ "test", Name ] ).
+
+
 start_test_driver( Name ) ->
-    start_driver( filename:join( ["test", Name ] ), [ ] ).
+    start_driver( test_driver_path( Name ), [] ).
+
+
+start_test_server( Name ) ->
+    start( test_driver_path( Name ), [] ).
+
 
 mock_lurch_os() ->
     meck:new( lurch_os, [] ),
@@ -175,7 +278,9 @@ mock_lurch_os() ->
                     end
                 end ).
 
+
 mock_lurch_os_stop( _ ) ->
     meck:unload( lurch_os ).
+
 
 -endif. % TEST
