@@ -166,7 +166,7 @@ start_test_driver( Name ) ->
     start_driver( filename:join( ["test", Name ] ), [ ] ).
 
 mock_lurch_os() ->
-    meck:new( lurch_os, [ ] ),
+    meck:new( lurch_os, [] ),
     meck:expect( lurch_os, safe_relative_path,
                 fun( Path ) ->
                     case Path of

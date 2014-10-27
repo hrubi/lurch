@@ -26,11 +26,11 @@
 %% ===================================================================
 -spec start( ) -> ignore | { error, term()} | { ok, pid() }.
 start( ) ->
-    gen_server:start( ?MODULE, [ ], [ ] ).
+    gen_server:start( ?MODULE, [], [] ).
 
 -spec start_link( ) -> ignore | { error, term()} | { ok, pid() }.
 start_link( ) ->
-    gen_server:start_link( ?MODULE, [ ], [ ] ).
+    gen_server:start_link( ?MODULE, [], [] ).
 
 -spec stop( pid() ) -> ok.
 stop( Server ) ->
@@ -214,7 +214,7 @@ device_poll_event_test_( ) ->
 % setup functions
 test_start( ) ->
     { ok, Pid } = start( ),
-    meck:new( lurch_driver_port, [ ] ),
+    meck:new( lurch_driver_port, [] ),
     meck:expect( lurch_driver_port, start_driver,
                  fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
     meck:expect( lurch_driver_port, stop_driver,
