@@ -63,10 +63,10 @@ partition2(_S, _Sep) ->
     undefined.
 
 %% Taken from mochiweb_util.erl
-%% @doc Return the reduced version of a relative path or throws an exception if
+%% @doc Return the reduced version of a relative path or returns undefined
 %%      it is not safe. safe relative paths can be joined with an absolute path and
 %%      will result in a subdirectory of the absolute path.
--spec safe_relative_path( string() ) -> string().
+-spec safe_relative_path( string() ) -> string() | undefined.
 safe_relative_path("/" ++ _) ->
     undefined;
 safe_relative_path(P) ->

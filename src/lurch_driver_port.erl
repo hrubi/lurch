@@ -68,16 +68,19 @@ request_event_async( Pid, Event ) ->
 %% Internal functions
 %% ===================================================================
 
+-spec from_to( any(), any() ) ->
+    { { any(), reference() }, { any(), reference() } }.
 from_to( From, To ) ->
     Tag = make_ref(),
     { { From, Tag }, { To, Tag } }.
 
--spec enter_loop( binary(), [ binary() ] ) -> no_return().
+-spec enter_loop( string() | binary(), [ string() | binary() ] ) ->
+    { stopped, { pid(), reference() } }.
 enter_loop( Driver, Parameters ) ->
     { ok, Port } = start_driver( Driver, Parameters ),
     receive_loop( Port ).
 
--spec receive_loop( port() ) -> ok.
+-spec receive_loop( port() ) -> { stopped, { pid(), reference() } }.
 receive_loop( Port ) ->
     receive
         { stop, { Pid, Tag } } ->
@@ -89,7 +92,8 @@ receive_loop( Port ) ->
             receive_loop( Port )
     end.
 
--spec start_driver( binary(), [ binary() ] ) -> { ok, port() }.
+-spec start_driver( string() | binary(), [ string() | binary() ] ) ->
+    { ok, port() }.
 start_driver( Driver, Parameters ) ->
     % TODO - error logging
     try Port = open_port( { spawn_executable, driver_path( Driver ) },
@@ -118,7 +122,7 @@ get_event( Port, Event ) ->
     true = erlang:port_command( Port, format_cmd( ?EVENT, [ Event ] ) ),
     get_event_acc( Port, [], [], ?DRIVER_TIMEOUT ).
 
--spec get_event_acc( port(), list(), list(), integer() ) -> list().
+-spec get_event_acc( port(), list( list() ), list(), integer() ) -> { ok, list() }.
 get_event_acc( Port, DataAcc, LineAcc, Timeout ) ->
     Start = now(),
     receive
