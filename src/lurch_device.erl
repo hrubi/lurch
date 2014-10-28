@@ -216,7 +216,7 @@ test_start( ) ->
     { ok, Pid } = start( ),
     meck:new( lurch_driver_port, [] ),
     meck:expect( lurch_driver_port, start,
-                 fun( _Driver, _Parameters ) -> { ok, port_mock } end ),
+                 fun( _Driver, _Parameters ) -> { ok, pid_mock } end ),
     meck:expect( lurch_driver_port, stop,
                  fun( Port ) -> ok end ),
     Pid.
