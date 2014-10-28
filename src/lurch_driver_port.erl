@@ -25,6 +25,10 @@
 -define( DRIVER_TIMEOUT, 100 ).
 -endif. % TEST
 
+-type msg_token() :: { pid(), reference() }.
+
+-export_type( [ msg_token/0 ] ).
+
 
 %% ===================================================================
 %% API functions
@@ -42,13 +46,13 @@ start_link( Driver, Parameters ) ->
     Pid = spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
     wait( { Pid, Tag } ).
 
--spec start_async( binary(), [ binary() ] ) -> { ok, { pid(), reference() } }.
+-spec start_async( binary(), [ binary() ] ) -> { ok, msg_token() }.
 start_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
     Pid = spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
     { ok, { Pid, Tag } }.
 
--spec start_link_async( binary(), [ binary() ] ) -> { ok, { pid(), reference() } }.
+-spec start_link_async( binary(), [ binary() ] ) -> { ok, msg_token() }.
 start_link_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
     Pid = spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
@@ -60,7 +64,7 @@ stop( Pid ) ->
     Pid ! { stop, From },
     wait( To ).
 
--spec stop_async( pid() ) -> { ok, { pid(), reference() } } | { error, timeout }.
+-spec stop_async( pid() ) -> { ok, msg_token() }.
 stop_async( Pid ) ->
     { From, To } = from_to( self(), Pid ),
     Pid ! { stop, From },
@@ -72,7 +76,7 @@ request_event( Pid, Event ) ->
     Pid ! { { get_event,  Event }, From },
     wait( To ).
 
--spec request_event_async( pid(), string() ) -> { ok, { pid(), reference() } }.
+-spec request_event_async( pid(), string() ) -> { ok, msg_token() }.
 request_event_async( Pid, Event ) ->
     { From, To } = from_to( self(), Pid ),
     Pid ! { { get_event, Event }, From },
@@ -93,7 +97,7 @@ from_to( From, To ) ->
 from( ) ->
     { self(), make_ref() }.
 
--spec wait( { pid(), reference() } ) ->
+-spec wait( msg_token() ) ->
     any() | { error, timeout }.
 wait( Id ) ->
     receive
@@ -104,8 +108,8 @@ wait( Id ) ->
 
 -spec enter_loop( string() | binary(),
                   [ string() | binary() ],
-                  { pid(), reference() } ) ->
-    { ok, { pid(), reference() } } | { error, term() }.
+                  msg_token() ) ->
+    { ok, msg_token() } | { error, term() }.
 enter_loop( Driver, Parameters, { Pid, Tag } ) ->
     case start_driver( Driver, Parameters ) of
         { ok, Port } ->
@@ -115,7 +119,7 @@ enter_loop( Driver, Parameters, { Pid, Tag } ) ->
             Pid ! { Error, { self(), Tag } }
     end.
 
--spec receive_loop( port() ) -> { ok, { pid(), reference() } }.
+-spec receive_loop( port() ) -> { ok, msg_token() }.
 receive_loop( Port ) ->
     receive
         { stop, { Pid, Tag } } ->
