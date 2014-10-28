@@ -105,18 +105,20 @@ wait( Id ) ->
 -spec enter_loop( string() | binary(),
                   [ string() | binary() ],
                   { pid(), reference() } ) ->
-    { ok, { pid(), reference() } }.
+    { ok, { pid(), reference() } } | { error, term() }.
 enter_loop( Driver, Parameters, { Pid, Tag } ) ->
-    % FIXME - propagate error
-    { ok, Port } = start_driver( Driver, Parameters ),
-    Pid ! { { ok, self() }, { self(), Tag } },
-    receive_loop( Port ).
+    case start_driver( Driver, Parameters ) of
+        { ok, Port } ->
+            Pid ! { { ok, self() }, { self(), Tag } },
+            receive_loop( Port );
+        Error ->
+            Pid ! { Error, { self(), Tag } }
+    end.
 
 -spec receive_loop( port() ) -> { ok, { pid(), reference() } }.
 receive_loop( Port ) ->
     receive
         { stop, { Pid, Tag } } ->
-            % FIXME - error propagation
             stop_driver( Port ),
             Pid ! { ok, { self(), Tag } };
 
@@ -126,9 +128,8 @@ receive_loop( Port ) ->
     end.
 
 -spec start_driver( string() | binary(), [ string() | binary() ] ) ->
-    { ok, port() }.
+    { ok, port() } | { error, term() }.
 start_driver( Driver, Parameters ) ->
-    % TODO - error logging
     try Port = open_port( { spawn_executable, driver_path( Driver ) },
                           [ { args, Parameters }
                           , { line, 8 }
@@ -230,6 +231,11 @@ driver_start_stop_test_() ->
     [ { "port started", ?_assert( IsPort ) }
     , { "port stopped", ?_assertEqual( undefined, StoppedPortInfo ) }
     ].
+
+
+driver_start_nonexistent_test_() ->
+    ?_assertEqual( { error, enoent }, start_test_driver( "nonexistent.sh" ) ).
+
 
 driver_stuck_test_() ->
     { ok, Port } = start_test_driver( "stuck.sh" ),
