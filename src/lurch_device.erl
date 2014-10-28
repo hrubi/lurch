@@ -78,16 +78,23 @@ init( _Args ) ->
 
 
 handle_call( { start_device, Configuration }, _From, State ) ->
-    case do_start_device( Configuration ) of
-        { ok, Device } ->
-                Devices = orddict:store( Device#device.id, Device, State#state.devices ),
-                NewState = State#state{ devices = Devices },
-                { reply, { ok, Device#device.id }, NewState };
-
+    Driver = proplists:get_value(driver, Configuration),
+    Parameters = proplists:get_value(parameters, Configuration),
+    Events = proplists:get_value(events, Configuration, []),
+    case lurch_driver_port:start( Driver, Parameters ) of
+        { ok, Pid } ->
+            DeviceId = make_ref( ),
+            Device = #device{ id = DeviceId
+                            , driver = Driver
+                            , parameters = Parameters
+                            , events = Events
+                            , pid = Pid },
+            Devices = orddict:store( Device#device.id, Device, State#state.devices ),
+            NewState = State#state{ devices = Devices },
+            { reply, { ok, Device#device.id }, NewState };
         { error, _ } = Error ->
             { reply, Error, State }
     end;
-
 
 handle_call( { stop_device, DeviceId }, _From, State ) ->
     case orddict:find( DeviceId, State#state.devices ) of
@@ -145,25 +152,6 @@ code_change( _OldVsn, State, _Extra ) ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
-
--spec do_start_device( term() ) -> { ok, term() } | { error, term() }.
-do_start_device( Configuration ) ->
-    Driver = proplists:get_value(driver, Configuration),
-    Parameters = proplists:get_value(parameters, Configuration),
-    Events = proplists:get_value(events, Configuration, []),
-    case lurch_driver_port:start( Driver, Parameters ) of
-        { ok, Pid } ->
-            DeviceId = make_ref( ),
-            Device = #device{ id = DeviceId
-                            , driver = Driver
-                            , parameters = Parameters
-                            , events = Events
-                            , pid = Pid },
-            { ok, Device };
-        { error, _ } = Error ->
-            Error
-    end.
-
 
 device_to_proplist( Device ) ->
     [ { id, Device#device.id }
