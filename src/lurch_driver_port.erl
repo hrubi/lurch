@@ -34,13 +34,13 @@
 start( Driver, Parameters ) ->
     { _, Tag } = From = from(),
     Pid = spawn( fun() -> enter_loop( Driver, Parameters, From ) end ),
-    wait_start( { Pid, Tag } ).
+    wait( { Pid, Tag } ).
 
 -spec start_link( binary(), [ binary() ] ) -> { ok, pid() } | { error, term() }.
 start_link( Driver, Parameters ) ->
     { _, Tag } = From = from(),
     Pid = spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
-    wait_start( { Pid, Tag } ).
+    wait( { Pid, Tag } ).
 
 -spec start_async( binary(), [ binary() ] ) -> { ok, { pid(), reference() } }.
 start_async( Driver, Parameters ) ->
@@ -58,7 +58,7 @@ start_link_async( Driver, Parameters ) ->
 stop( Pid ) ->
     { From, To } = from_to( self(), Pid ),
     Pid ! { stop, From },
-    wait_stop( To ).
+    wait( To ).
 
 -spec stop_async( pid() ) -> { ok, { pid(), reference() } } | { error, timeout }.
 stop_async( Pid ) ->
@@ -70,7 +70,7 @@ stop_async( Pid ) ->
 request_event( Pid, Event ) ->
     { From, To } = from_to( self(), Pid ),
     Pid ! { { get_event,  Event }, From },
-    wait_event( To ).
+    wait( To ).
 
 -spec request_event_async( pid(), string() ) -> { ok, { pid(), reference() } }.
 request_event_async( Pid, Event ) ->
@@ -93,27 +93,11 @@ from_to( From, To ) ->
 from( ) ->
     { self(), make_ref() }.
 
--spec wait_start( { pid(), reference() } ) -> { ok, pid() } | { error, term() }.
-wait_start( Id ) ->
-    wait( Id, started ).
-
--spec wait_stop( { pid(), reference() } ) -> ok | { error, term() }.
-wait_stop( Id ) ->
-    case wait( Id, stopped ) of
-        { ok, _ } -> ok;
-        E -> E
-    end.
-
--spec wait_event( { pid(), reference() } ) -> { event, term() } | { error, term() }.
-wait_event( Id ) ->
-    wait( Id, event ).
-
--spec wait( { pid(), reference() }, term() ) ->
-    { ok, term() } | { error, term() }.
-wait( Id, Type ) ->
+-spec wait( { pid(), reference() } ) ->
+    any() | { error, timeout }.
+wait( Id ) ->
     receive
-        { { Type, Result }, Id } -> Result;
-        Error -> Error
+        { Result, Id } -> Result
     after
         ?DRIVER_TIMEOUT -> { error, timeout }
     end.
@@ -121,23 +105,23 @@ wait( Id, Type ) ->
 -spec enter_loop( string() | binary(),
                   [ string() | binary() ],
                   { pid(), reference() } ) ->
-    { { stopped, pid() }, { pid(), reference() } }.
+    { ok, { pid(), reference() } }.
 enter_loop( Driver, Parameters, { Pid, Tag } ) ->
     % FIXME - propagate error
     { ok, Port } = start_driver( Driver, Parameters ),
-    Pid ! { { started, { ok, self() } }, { self(), Tag } },
+    Pid ! { { ok, self() }, { self(), Tag } },
     receive_loop( Port ).
 
--spec receive_loop( port() ) -> { { stopped, pid() }, { pid(), reference() } }.
+-spec receive_loop( port() ) -> { ok, { pid(), reference() } }.
 receive_loop( Port ) ->
     receive
         { stop, { Pid, Tag } } ->
             % FIXME - error propagation
             stop_driver( Port ),
-            Pid ! { { stopped, { ok, self() } }, { self(), Tag } };
+            Pid ! { ok, { self(), Tag } };
 
         { { get_event, Event }, { Pid, Tag } } ->
-            Pid ! { { event, get_event( Port, Event ) }, { self(), Tag } },
+            Pid ! { get_event( Port, Event ), { self(), Tag } },
             receive_loop( Port )
     end.
 
@@ -301,7 +285,7 @@ server_scenario_test_() ->
 server_scenario_async_test_() ->
     { ok, From } = start_test_server_async( "echo.sh" ),
     { ok, Pid } = receive
-        { { started, Res1 }, From } -> Res1
+        { Res1, From } -> Res1
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
@@ -309,14 +293,14 @@ server_scenario_async_test_() ->
 
     { ok, From2 } = request_event_async( Pid, "SomeEvent" ),
     ResEvent = receive
-        { { event, Res2 }, From2 } -> Res2
+        { Res2, From2 } -> Res2
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
 
     { ok, From3 } = stop_async( Pid ),
     ResStop = receive
-        { { stopped, Res3 }, From3 } -> Res3
+        { Res3, From3 } -> Res3
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
@@ -327,7 +311,7 @@ server_scenario_async_test_() ->
     , { "receive event", ?_assertEqual(
                             { ok, [ "EVENT", "SomeEvent" ] },
                             ResEvent ) }
-    , { "server stopped", ?_assertEqual( { ok, Pid } , ResStop ) }
+    , { "server stopped", ?_assertEqual( ok , ResStop ) }
     , { "server pid not alive", ?_assertNot( ProcAlive2 ) }
     ].
 
