@@ -1,4 +1,5 @@
-% @copyright 2014, Jan Hruban
+% @copyright 2007, Mochi Media, Inc.
+%            2014, Jan Hruban
 %
 % @doc OS level utility functions
 
