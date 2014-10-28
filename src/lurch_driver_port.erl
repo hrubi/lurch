@@ -299,25 +299,24 @@ server_scenario_test_() ->
     ].
 
 server_scenario_async_test_() ->
-    { ok, { Pid, _ } = From } = start_test_server_async( "echo.sh" ),
+    { ok, From } = start_test_server_async( "echo.sh" ),
+    { ok, Pid } = receive
+        { { started, Res1 }, From } -> Res1
+    after
+        ?DRIVER_TIMEOUT -> timeout
+    end,
     ProcAlive = is_process_alive( Pid ),
-    ?debugVal( From ),
-    ResStart = receive
-        { { started, { ok, Pid } }, From } -> true
-    after
-        ?DRIVER_TIMEOUT -> timeout
-    end,
+
     { ok, From2 } = request_event_async( Pid, "SomeEvent" ),
-    ?debugVal( From2 ),
     ResEvent = receive
-        { { event, E }, From2 } -> E
+        { { event, Res2 }, From2 } -> Res2
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
+
     { ok, From3 } = stop_async( Pid ),
-    ?debugVal( From3 ),
     ResStop = receive
-        { { stopped, { ok, Pid } }, From3 } -> true
+        { { stopped, Res3 }, From3 } -> Res3
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
@@ -325,9 +324,10 @@ server_scenario_async_test_() ->
     ExpEventRes = { ok, [ "EVENT", "SomeEvent" ] },
 
     [ { "server pid alive", ?_assert( ProcAlive ) }
-    , { "server started", ?_assert( ResStart ) }
-    , { "receive event", ?_assertEqual( ExpEventRes, ResEvent ) }
-    , { "server stopped", ?_assert( ResStop ) }
+    , { "receive event", ?_assertEqual(
+                            { ok, [ "EVENT", "SomeEvent" ] },
+                            ResEvent ) }
+    , { "server stopped", ?_assertEqual( { ok, Pid } , ResStop ) }
     , { "server pid not alive", ?_assertNot( ProcAlive2 ) }
     ].
 
