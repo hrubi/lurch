@@ -67,7 +67,7 @@ poll_device_event( Server, Id, Event ) ->
 
 -record( state,
     { devices = orddict:new() :: orddict:orddict()
-    , polls = [] :: list( lurch_driver_port:msg_token() )
+    , polls = [] :: list( lurch_driver_port:msg_tag() )
     } ).
 
 
