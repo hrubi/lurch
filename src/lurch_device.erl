@@ -50,10 +50,9 @@ stop_device( Server, Id ) ->
 list_devices( Server ) ->
     gen_server:call( Server, list_devices ).
 
--spec poll_device_event( pid() , device_id(), binary() ) ->
-    { ok, term() } | { error, no_such_device } | { error | no_such_event }.
+-spec poll_device_event( pid() , device_id(), binary() ) -> ok.
 poll_device_event( Server, Id, Event ) ->
-    gen_server:call( Server, { poll_device_event, Id, Event } ).
+    gen_server:cast( Server, { poll_device_event, Id, Event } ).
 
 %% ===================================================================
 %% gen_server callbacks
@@ -68,12 +67,13 @@ poll_device_event( Server, Id, Event ) ->
 
 -record( state,
     { devices :: orddict:orddict()
+    , polls :: list( lurch_driver_port:msg_token() )
     } ).
 
 
 init( _Args ) ->
-    Devices = orddict:new(),
-    State = #state{ devices = Devices },
+    State = #state{ devices = orddict:new()
+                  , polls = [] },
     { ok, State }.
 
 
@@ -89,7 +89,7 @@ handle_call( { start_device, Configuration }, _From, State ) ->
                             , parameters = Parameters
                             , events = Events
                             , pid = Pid },
-            Devices = orddict:store( Device#device.id, Device, State#state.devices ),
+            Devices = orddict:store( DeviceId, Device, State#state.devices ),
             NewState = State#state{ devices = Devices },
             { reply, { ok, Device#device.id }, NewState };
         { error, _ } = Error ->
@@ -114,23 +114,20 @@ handle_call( list_devices, _From, State ) ->
     { reply, { ok, DeviceList }, State };
 
 
-handle_call( { poll_device_event, DeviceId, Event }, _From, State ) ->
-    Reply = case orddict:find( DeviceId, State#state.devices ) of
-        { ok, Device } ->
-            case lists:member( Event, Device#device.events ) of
-                true -> { ok, <<"dummy">> };
-                false -> { error, no_such_event }
-            end;
-
-        error -> { error, no_such_device }
-    end,
-    { reply, Reply, State };
-
-
-
 handle_call( stop, _From, State ) ->
     { stop, shutdown, ok, State }.
 
+
+handle_cast( { poll_device_event, DeviceId, Event }, State ) ->
+    case maybe_get_device_pid( DeviceId, Event, State#state.devices ) of
+        { ok, Pid } ->
+            Token = lurch_driver_port:request_event_async( Pid, Event ),
+            NewState = State#state{ polls = [ Token | State#state.polls ] },
+            { noreply, NewState };
+        _ ->
+            % FIXME - log?
+            { noreply, State }
+    end;
 
 handle_cast( _Request, State ) ->
     { noreply, State }.
@@ -152,6 +149,17 @@ code_change( _OldVsn, State, _Extra ) ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
+
+maybe_get_device_pid( DeviceId, Event, Devices ) ->
+    case orddict:find( DeviceId, Devices ) of
+        { ok, Device } ->
+            case lists:member( Event, Device#device.events ) of
+                true -> { ok, Device#device.pid };
+                false -> { error, no_such_event }
+            end;
+        error ->
+            { error, no_such_device }
+    end.
 
 device_to_proplist( Device ) ->
     [ { id, Device#device.id }
@@ -196,7 +204,7 @@ device_list_test_( ) ->
 
 device_poll_event_test_( ) ->
     { "poll events"
-    , ?setup( test_poll_device_event ) }.
+    , test_poll_device_event() }.
 
 
 % setup functions
@@ -206,7 +214,7 @@ test_start( ) ->
     meck:expect( lurch_driver_port, start,
                  fun( _Driver, _Parameters ) -> { ok, pid_mock } end ),
     meck:expect( lurch_driver_port, stop,
-                 fun( Port ) -> ok end ),
+                 fun( _Port ) -> ok end ),
     Pid.
 
 
@@ -240,7 +248,6 @@ test_start_device_error( Pid ) ->
     [ { "error propagated", ?_assertMatch( { error, _Error }, StartResult ) } ].
 
 
-
 test_add_list_devices( Pid ) ->
     DeviceCount = 2,
     StartDeviceOk = fun( ) ->
@@ -259,21 +266,28 @@ test_add_list_devices( Pid ) ->
     ].
 
 
-% Helper functions
-test_poll_device_event( Pid ) ->
-    { ok, DeviceId } = start_device( Pid, dummy_driver_config( ) ),
-    InvalidDeviceId = make_ref(),
-    InvalidEvent = <<"non_existing_event">>,
-    Res1 = poll_device_event( Pid, DeviceId, ?EVENT_NAME ),
-    Res2 = poll_device_event( Pid, InvalidDeviceId, ?EVENT_NAME ),
-    Res3 = poll_device_event( Pid, DeviceId, InvalidEvent ),
-    [ { "poll event", ?_assertEqual( { ok, <<"dummy">> }, Res1 ) }
-    , { "bad device", ?_assertEqual( { error, no_such_device }, Res2 ) }
-    , { "bad event", ?_assertEqual( { error, no_such_event }, Res3 ) }
+test_poll_device_event() ->
+    meck:new( lurch_driver_port, [] ),
+    Token = make_ref(),
+    meck:expect( lurch_driver_port, request_event_async,
+                 fun( _, _ ) -> Token end ),
+    DeviceId = make_ref(),
+    Event = myevent,
+    Device = #device{ id = DeviceId, events = [ Event ] },
+    S0 = #state{ devices = orddict:store( DeviceId, Device, orddict:new() )
+               , polls = [] },
+
+    { noreply, S1 } = handle_cast( { poll_device_event, DeviceId, Event }, S0 ),
+    { noreply, S2 } = handle_cast( { poll_device_event, invalid, Event }, S0 ),
+    { noreply, S3 } = handle_cast( { poll_device_event, DeviceId, invalid }, S0 ),
+
+    [ { "valid device and event", ?_assertEqual( [ Token ], S1#state.polls ) }
+    , { "invalid device", ?_assertEqual( S0, S2 ) }
+    , { "invalid event", ?_assertEqual( S0, S3 ) }
     ].
 
 
-
+% Helper functions
 dummy_driver_config( ) ->
     [ { driver, ?DRIVER_NAME }
     , { parameters, [] }
