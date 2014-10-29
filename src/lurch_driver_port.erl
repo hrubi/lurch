@@ -25,7 +25,7 @@
 -define( DRIVER_TIMEOUT, 100 ).
 -endif. % TEST
 
--type msg_tag() :: { pid(), reference() }.
+-type msg_tag() :: reference().
 
 -export_type( [ msg_tag/0 ] ).
 
@@ -37,86 +37,81 @@
 -spec start( binary(), [ binary() ] ) -> { ok, pid() } | { error, term() }.
 start( Driver, Parameters ) ->
     { _, Tag } = From = from(),
-    Pid = spawn( fun() -> enter_loop( Driver, Parameters, From ) end ),
-    wait( { Pid, Tag } ).
+    spawn( fun() -> enter_loop( Driver, Parameters, From ) end ),
+    wait( Tag ).
 
 -spec start_link( binary(), [ binary() ] ) -> { ok, pid() } | { error, term() }.
 start_link( Driver, Parameters ) ->
     { _, Tag } = From = from(),
-    Pid = spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
-    wait( { Pid, Tag } ).
+    spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
+    wait( Tag ).
 
 -spec start_async( binary(), [ binary() ] ) -> { ok, msg_tag() }.
 start_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
-    Pid = spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
-    { ok, { Pid, Tag } }.
+    spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
+    { ok, Tag }.
 
 -spec start_link_async( binary(), [ binary() ] ) -> { ok, msg_tag() }.
 start_link_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
-    Pid = spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
-    { ok, { Pid, Tag } }.
+    spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
+    { ok, Tag }.
 
 -spec stop( pid() ) -> ok | { error, timeout }.
 stop( Pid ) ->
-    { From, To } = from_to( self(), Pid ),
+    { _, Tag } = From = from(),
     Pid ! { stop, From },
-    wait( To ).
+    wait( Tag ).
 
 -spec stop_async( pid() ) -> { ok, msg_tag() }.
 stop_async( Pid ) ->
-    { From, To } = from_to( self(), Pid ),
+    { _, Tag } = From = from(),
     Pid ! { stop, From },
-    { ok, To }.
+    { ok, Tag }.
 
 -spec request_event( pid(), string() ) -> { ok, term() } | { error, timeout }.
 request_event( Pid, Event ) ->
-    { From, To } = from_to( self(), Pid ),
+    { _, Tag } = From = from(),
     Pid ! { { get_event,  Event }, From },
-    wait( To ).
+    wait( Tag ).
 
 -spec request_event_async( pid(), string() ) -> { ok, msg_tag() }.
 request_event_async( Pid, Event ) ->
-    { From, To } = from_to( self(), Pid ),
+    { _, Tag } = From = from(),
     Pid ! { { get_event, Event }, From },
-    { ok, To }.
+    { ok, Tag }.
 
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
 
--spec from_to( any(), any() ) ->
-    { { any(), reference() }, { any(), reference() } }.
-from_to( From, To ) ->
-    Tag = make_ref(),
-    { { From, Tag }, { To, Tag } }.
 
--spec from( ) -> { any(), reference() }.
-from( ) ->
+-spec from() -> { pid(), reference() }.
+from() ->
     { self(), make_ref() }.
 
 -spec wait( msg_tag() ) ->
     any() | { error, timeout }.
-wait( Id ) ->
+wait( Tag ) ->
     receive
-        { Result, Id } -> Result
+        { Result, Tag } -> Result
     after
         ?DRIVER_TIMEOUT -> { error, timeout }
     end.
 
 -spec enter_loop( string() | binary(),
                   [ string() | binary() ],
-                  msg_tag() ) ->
-    { ok, msg_tag() } | { error, term() }.
+                  { pid(), msg_tag() } ) ->
+    { ok, msg_tag() } | { { error, term() }, msg_tag() }.
 enter_loop( Driver, Parameters, { Pid, Tag } ) ->
     case start_driver( Driver, Parameters ) of
         { ok, Port } ->
-            Pid ! { { ok, self() }, { self(), Tag } },
+            Pid ! { { ok, self() }, Tag },
             receive_loop( Port );
         Error ->
-            Pid ! { Error, { self(), Tag } }
+            Pid ! { Error, Tag }
     end.
 
 -spec receive_loop( port() ) -> { ok, msg_tag() }.
@@ -124,10 +119,10 @@ receive_loop( Port ) ->
     receive
         { stop, { Pid, Tag } } ->
             stop_driver( Port ),
-            Pid ! { ok, { self(), Tag } };
+            Pid ! { ok, Tag };
 
         { { get_event, Event }, { Pid, Tag } } ->
-            Pid ! { get_event( Port, Event ), { self(), Tag } },
+            Pid ! { get_event( Port, Event ), Tag },
             receive_loop( Port )
     end.
 
