@@ -66,15 +66,13 @@ poll_device_event( Server, Id, Event ) ->
     } ).
 
 -record( state,
-    { devices :: orddict:orddict()
-    , polls :: list( lurch_driver_port:msg_token() )
+    { devices = orddict:new() :: orddict:orddict()
+    , polls = [] :: list( lurch_driver_port:msg_token() )
     } ).
 
 
 init( _Args ) ->
-    State = #state{ devices = orddict:new()
-                  , polls = [] },
-    { ok, State }.
+    { ok, #state{} }.
 
 
 handle_call( { start_device, Configuration }, _From, State ) ->
@@ -274,8 +272,7 @@ test_poll_device_event() ->
     DeviceId = make_ref(),
     Event = myevent,
     Device = #device{ id = DeviceId, events = [ Event ] },
-    S0 = #state{ devices = orddict:store( DeviceId, Device, orddict:new() )
-               , polls = [] },
+    S0 = #state{ devices = orddict:store( DeviceId, Device, orddict:new() ) },
 
     { noreply, S1 } = handle_cast( { poll_device_event, DeviceId, Event }, S0 ),
     { noreply, S2 } = handle_cast( { poll_device_event, invalid, Event }, S0 ),
