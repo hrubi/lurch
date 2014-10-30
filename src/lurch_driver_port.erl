@@ -177,6 +177,7 @@ start_driver( Driver, Parameters ) ->
 stop_driver( Port ) ->
     { os_pid, Pid } = erlang:port_info( Port, os_pid ),
     erlang:port_close( Port ),
+    % TODO - give the driver some time to finish cleanly
     case lurch_os:is_os_process_alive( Pid ) of
         true -> lurch_os:kill_os_process(9, Pid),
                 ok;
