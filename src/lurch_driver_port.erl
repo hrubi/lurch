@@ -4,6 +4,8 @@
 
 -module( lurch_driver_port ).
 
+-behaviour( gen_server ).
+
 % API functions
 -export(
     [ start/2
@@ -16,13 +18,21 @@
     , request_event_async/2
     ] ).
 
+% gen_server callbacks
+-export(
+    [ init/1, handle_call/3, handle_cast/2
+    , handle_info/2, terminate/2, code_change/3
+    ] ).
+
 -include( "lurch_driver_protocol.hrl" ).
 
 -define( DRIVER_DIR, code:lib_dir( lurch, drivers ) ).
 -ifndef( TEST ).
 -define( DRIVER_TIMEOUT, 5000 ).
+-define( CALL_TIMEOUT, 5100 ).
 -else.
 -define( DRIVER_TIMEOUT, 100 ).
+-define( CALL_TIMEOUT, 200 ).
 -endif. % TEST
 
 -type msg_tag() :: reference().
@@ -36,95 +46,119 @@
 
 -spec start( binary(), [ binary() ] ) -> { ok, pid() } | { error, term() }.
 start( Driver, Parameters ) ->
-    { _, Tag } = From = from(),
-    spawn( fun() -> enter_loop( Driver, Parameters, From ) end ),
-    wait( Tag ).
+    gen_server:start( ?MODULE, { sync, Driver, Parameters }, [] ).
+
 
 -spec start_link( binary(), [ binary() ] ) -> { ok, pid() } | { error, term() }.
 start_link( Driver, Parameters ) ->
-    { _, Tag } = From = from(),
-    spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
-    wait( Tag ).
+    gen_server:start_link( ?MODULE, { sync, Driver, Parameters }, [] ).
+
 
 -spec start_async( binary(), [ binary() ] ) -> { ok, msg_tag() }.
 start_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
-    spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
+    { ok, _ } = gen_server:start(
+                  ?MODULE,
+                  { async, Driver, Parameters, From }, [] ),
     { ok, Tag }.
+
 
 -spec start_link_async( binary(), [ binary() ] ) -> { ok, msg_tag() }.
 start_link_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
-    spawn_link( fun() -> enter_loop( Driver, Parameters, From ) end ),
+    { ok, _ } = gen_server:start_link(
+                  ?MODULE,
+                  { async, Driver, Parameters, From }, [] ),
     { ok, Tag }.
 
--spec stop( pid() ) -> ok | { error, timeout }.
+
+-spec stop( pid() ) -> ok.
 stop( Pid ) ->
-    { _, Tag } = From = from(),
-    Pid ! { stop, From },
-    wait( Tag ).
+    gen_server:call( Pid, stop, ?CALL_TIMEOUT ).
 
 -spec stop_async( pid() ) -> { ok, msg_tag() }.
 stop_async( Pid ) ->
     { _, Tag } = From = from(),
-    Pid ! { stop, From },
+    ok = gen_server:cast( Pid, { stop, From } ),
     { ok, Tag }.
 
 -spec request_event( pid(), string() ) -> { ok, term() } | { error, timeout }.
 request_event( Pid, Event ) ->
-    { _, Tag } = From = from(),
-    Pid ! { { get_event,  Event }, From },
-    wait( Tag ).
+    gen_server:call( Pid, { get_event, Event }, ?CALL_TIMEOUT ).
 
 -spec request_event_async( pid(), string() ) -> { ok, msg_tag() }.
 request_event_async( Pid, Event ) ->
     { _, Tag } = From = from(),
-    Pid ! { { get_event, Event }, From },
+    ok = gen_server:cast( Pid, { get_event, Event, From } ),
     { ok, Tag }.
+
+
+%% ===================================================================
+%% gen_server callbacks
+%% ===================================================================
+
+-record( state, { port :: port() | undefined } ).
+
+init( { sync, Driver, Params } ) ->
+    case start_driver( Driver, Params ) of
+        { ok, Port } ->
+            { ok, #state{ port = Port } };
+        { error, Error } ->
+            { stop, Error }
+    end;
+
+init( { async, Driver, Params, From } ) ->
+    ok = gen_server:cast( self(), { start_driver, Driver, Params, From } ),
+    { ok, #state{} }.
+
+
+handle_call( stop, _From, State ) ->
+    ok = stop_driver( State#state.port ),
+    { stop, normal, ok, #state{} };
+
+handle_call( { get_event, Event }, _From, State ) ->
+    { reply, get_event( State#state.port, Event ), State }.
+
+
+handle_cast( { start_driver, Driver, Params, { Pid, Tag } }, #state{} ) ->
+    case start_driver( Driver, Params ) of
+        { ok, Port } ->
+            Pid ! { { ok, self() }, Tag },
+            { noreply, #state{ port = Port } };
+        Error ->
+            Pid ! { Error, Tag }
+    end;
+
+handle_cast( { stop, { Pid, Tag } }, State ) ->
+    ok = stop_driver( State#state.port ),
+    Pid ! { ok, Tag },
+    { stop, normal, #state{} };
+
+handle_cast( { get_event, Event, { Pid, Tag } }, State ) ->
+    Pid ! { get_event( State#state.port, Event ), Tag },
+    { noreply, State }.
+
+
+handle_info( _Info, State ) ->
+    { noreply, State }.
+
+
+terminate( _Reason, _State ) ->
+    ok.
+
+
+code_change( _OldVsn, State, _Extra ) ->
+    { ok, State }.
 
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
 
-
 -spec from() -> { pid(), reference() }.
 from() ->
     { self(), make_ref() }.
 
--spec wait( msg_tag() ) ->
-    any() | { error, timeout }.
-wait( Tag ) ->
-    receive
-        { Result, Tag } -> Result
-    after
-        ?DRIVER_TIMEOUT -> { error, timeout }
-    end.
-
--spec enter_loop( string() | binary(),
-                  [ string() | binary() ],
-                  { pid(), msg_tag() } ) ->
-    { ok, msg_tag() } | { { error, term() }, msg_tag() }.
-enter_loop( Driver, Parameters, { Pid, Tag } ) ->
-    case start_driver( Driver, Parameters ) of
-        { ok, Port } ->
-            Pid ! { { ok, self() }, Tag },
-            receive_loop( Port );
-        Error ->
-            Pid ! { Error, Tag }
-    end.
-
--spec receive_loop( port() ) -> { ok, msg_tag() }.
-receive_loop( Port ) ->
-    receive
-        { stop, { Pid, Tag } } ->
-            stop_driver( Port ),
-            Pid ! { ok, Tag };
-
-        { { get_event, Event }, { Pid, Tag } } ->
-            Pid ! { get_event( Port, Event ), Tag },
-            receive_loop( Port )
-    end.
 
 -spec start_driver( string() | binary(), [ string() | binary() ] ) ->
     { ok, port() } | { error, term() }.
