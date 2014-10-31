@@ -247,7 +247,7 @@ format_cmd( Cmd, Data ) ->
 
 % Driver tests - lower level
 
-driver_path_test_() ->
+path_test_() ->
     { "driver path",
         { setup,
             fun mock_lurch_os/0,
@@ -257,7 +257,7 @@ driver_path_test_() ->
             ] } }.
 
 
-driver_start_stop_test_() ->
+start_stop_test_() ->
     { ok, Port } = start_test_driver( "echo.sh" ),
     IsPort = erlang:is_port( Port ),
     stop_driver( Port ),
@@ -267,11 +267,11 @@ driver_start_stop_test_() ->
     ].
 
 
-driver_start_nonexistent_test_() ->
+start_nonexistent_test_() ->
     ?_assertEqual( { error, enoent }, start_test_driver( "nonexistent.sh" ) ).
 
 
-driver_stuck_test_() ->
+stuck_test_() ->
     { ok, Port } = start_test_driver( "stuck.sh" ),
     { os_pid, OsPid } = erlang:port_info( Port, os_pid ),
     stop_driver( Port ),
@@ -280,7 +280,7 @@ driver_stuck_test_() ->
     ].
 
 
-driver_get_event_test_() ->
+get_event_test_() ->
     { ok, Port } = start_test_driver( "echo.sh" ),
     Res = get_event( Port, "SomeEvent" ),
     ExpData = { ok, [ "EVENT", "SomeEvent" ] },
@@ -288,7 +288,7 @@ driver_get_event_test_() ->
     ].
 
 
-driver_timeout_test_() ->
+timeout_test_() ->
     { ok, Port } = start_test_driver( "stuck.sh" ),
     [ { "driver timeout"
       , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
@@ -296,9 +296,9 @@ driver_timeout_test_() ->
     ].
 
 
-driver_timeout2_test_() ->
+timeout2_test_() ->
     { ok, Port } = start_test_driver( "garbage.sh" ),
-    [ { "driver timeout"
+    [ { "driver timeout when sending garbage"
       , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
     , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
     ].
