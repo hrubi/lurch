@@ -202,7 +202,7 @@ device_list_test_( ) ->
 
 device_poll_event_test_( ) ->
     { "poll events"
-    , test_poll_device_event() }.
+    , ?setup( test_poll_device_event ) }.
 
 
 % setup functions
@@ -264,8 +264,7 @@ test_add_list_devices( Pid ) ->
     ].
 
 
-test_poll_device_event() ->
-    meck:new( lurch_dev, [] ),
+test_poll_device_event( Pid ) ->
     Token = make_ref(),
     meck:expect( lurch_dev, request_event_async,
                  fun( _, _ ) -> Token end ),
