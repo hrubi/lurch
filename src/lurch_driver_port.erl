@@ -143,8 +143,8 @@ handle_info( _Info, State ) ->
     { noreply, State }.
 
 
-terminate( _Reason, _State ) ->
-    ok.
+terminate( _Reason, State ) ->
+    stop_driver( State#state.port ).
 
 
 code_change( _OldVsn, State, _Extra ) ->
@@ -172,11 +172,16 @@ start_driver( Driver, Parameters ) ->
         error:Error -> { error, Error }
     end.
 
-
 -spec stop_driver( port() ) -> ok.
 stop_driver( Port ) ->
-    { os_pid, Pid } = erlang:port_info( Port, os_pid ),
-    erlang:port_close( Port ),
+    case erlang:port_info( Port, os_pid ) of
+        { os_pid, Pid } -> do_stop_driver( Port, Pid );
+        undefined -> ok
+    end.
+
+-spec do_stop_driver( port(), non_neg_integer() ) -> ok.
+do_stop_driver( Port, Pid ) ->
+    catch erlang:port_close( Port ),
     % TODO - give the driver some time to finish cleanly
     case lurch_os:is_os_process_alive( Pid ) of
         true -> lurch_os:kill_os_process(9, Pid),
@@ -274,17 +279,20 @@ start_nonexistent_test_() ->
 stuck_test_() ->
     { ok, Port } = start_test_driver( "stuck.sh" ),
     { os_pid, OsPid } = erlang:port_info( Port, os_pid ),
-    stop_driver( Port ),
+    ResStop = stop_driver( Port ),
     IsOsPidAliveCmd = lists:flatten( io_lib:format("kill -0 ~b", [ OsPid ] ) ),
-    [ { "process killed", ?_assertCmdStatus( 1, IsOsPidAliveCmd ) }
+    [ { "stop driver", ?_assertEqual( ok, ResStop ) }
+    , { "process killed", ?_assertCmdStatus( 1, IsOsPidAliveCmd ) }
     ].
 
 
 get_event_test_() ->
     { ok, Port } = start_test_driver( "echo.sh" ),
     Res = get_event( Port, "SomeEvent" ),
+    ResStop = stop_driver( Port ),
     ExpData = { ok, [ "EVENT", "SomeEvent" ] },
     [ { "get event", ?_assertEqual( ExpData, Res ) }
+    , { "stop driver", ?_assertEqual( ok, ResStop ) }
     ].
 
 
@@ -302,6 +310,13 @@ timeout2_test_() ->
       , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
     , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
     ].
+
+stop_idempotent_test_() ->
+    { ok, Port } = start_test_driver( "echo.sh" ),
+    Tries = 2,
+    [ { lists:flatten( io_lib:format( "stop ~B", [ Try ] ) ),
+        ?_assertEqual( ok, stop_driver( Port ) ) }
+      || Try <- lists:seq( 1, Tries ) ].
 
 
 % server tests - API
