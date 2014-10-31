@@ -1,10 +1,10 @@
 % @copyright 2014, Jan Hruban
 %
-% @doc Communicates with process handling port, which does the heavy lifting
+% @doc Communicates with processes handling port, which does the heavy lifting
 % To guarantee good throughput, this module mediates the client requests and
 % puts them together.
 
--module( lurch_device ).
+-module( lurch_devman ).
 
 -behaviour( gen_server ).
 
@@ -67,7 +67,7 @@ poll_device_event( Server, Id, Event ) ->
 
 -record( state,
     { devices = orddict:new() :: orddict:orddict()
-    , polls = [] :: list( lurch_driver_port:msg_tag() )
+    , polls = [] :: list( lurch_dev:msg_tag() )
     } ).
 
 
@@ -79,7 +79,7 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Driver = proplists:get_value(driver, Configuration),
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
-    case lurch_driver_port:start( Driver, Parameters ) of
+    case lurch_dev:start( Driver, Parameters ) of
         { ok, Pid } ->
             DeviceId = make_ref( ),
             Device = #device{ id = DeviceId
@@ -97,7 +97,7 @@ handle_call( { start_device, Configuration }, _From, State ) ->
 handle_call( { stop_device, DeviceId }, _From, State ) ->
     case orddict:find( DeviceId, State#state.devices ) of
         { ok, Device } ->
-            lurch_driver_port:stop( Device#device.pid ),
+            lurch_dev:stop( Device#device.pid ),
             NewDevices = orddict:erase( DeviceId, State#state.devices ),
             NewState = State#state{ devices = NewDevices },
             { reply, ok, NewState };
@@ -119,7 +119,7 @@ handle_call( stop, _From, State ) ->
 handle_cast( { poll_device_event, DeviceId, Event }, State ) ->
     case maybe_get_device_pid( DeviceId, Event, State#state.devices ) of
         { ok, Pid } ->
-            Token = lurch_driver_port:request_event_async( Pid, Event ),
+            Token = lurch_dev:request_event_async( Pid, Event ),
             NewState = State#state{ polls = [ Token | State#state.polls ] },
             { noreply, NewState };
         _ ->
@@ -208,16 +208,16 @@ device_poll_event_test_( ) ->
 % setup functions
 test_start( ) ->
     { ok, Pid } = start( ),
-    meck:new( lurch_driver_port, [] ),
-    meck:expect( lurch_driver_port, start,
+    meck:new( lurch_dev, [] ),
+    meck:expect( lurch_dev, start,
                  fun( _Driver, _Parameters ) -> { ok, pid_mock } end ),
-    meck:expect( lurch_driver_port, stop,
+    meck:expect( lurch_dev, stop,
                  fun( _Port ) -> ok end ),
     Pid.
 
 
 test_stop( Pid ) ->
-    meck:unload( lurch_driver_port ),
+    meck:unload( lurch_dev ),
     stop( Pid ).
 
 
@@ -240,7 +240,7 @@ test_start_stop_device( Pid ) ->
 
 
 test_start_device_error( Pid ) ->
-    meck:expect( lurch_driver_port, start,
+    meck:expect( lurch_dev, start,
                  fun( _Driver, _Parameters ) -> { error, enoent } end ),
     StartResult = start_device( Pid, dummy_driver_config( ) ),
     [ { "error propagated", ?_assertMatch( { error, _Error }, StartResult ) } ].
@@ -265,9 +265,9 @@ test_add_list_devices( Pid ) ->
 
 
 test_poll_device_event() ->
-    meck:new( lurch_driver_port, [] ),
+    meck:new( lurch_dev, [] ),
     Token = make_ref(),
-    meck:expect( lurch_driver_port, request_event_async,
+    meck:expect( lurch_dev, request_event_async,
                  fun( _, _ ) -> Token end ),
     DeviceId = make_ref(),
     Event = myevent,

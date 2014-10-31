@@ -2,7 +2,7 @@
 %
 % @doc Provides communication mechanism to/from external driver
 
--module( lurch_driver_port ).
+-module( lurch_dev ).
 
 -behaviour( gen_server ).
 
@@ -24,7 +24,7 @@
     , handle_info/2, terminate/2, code_change/3
     ] ).
 
--include( "lurch_driver_protocol.hrl" ).
+-include( "lurch_dev_proto.hrl" ).
 
 -define( DRIVER_DIR, code:lib_dir( lurch, drivers ) ).
 -ifndef( TEST ).
@@ -290,7 +290,7 @@ get_event_test_() ->
     { ok, Port } = start_test_driver( "echo.sh" ),
     Res = get_event( Port, "SomeEvent" ),
     ResStop = stop_driver( Port ),
-    ExpData = { ok, [ "EVENT", "SomeEvent" ] },
+    ExpData = { ok, [ ?EVENT, "SomeEvent" ] },
     [ { "get event", ?_assertEqual( ExpData, Res ) }
     , { "stop driver", ?_assertEqual( ok, ResStop ) }
     ].
@@ -327,7 +327,7 @@ server_scenario_test_() ->
     ResEvent = request_event( Pid, "SomeEvent" ),
     ResStop = stop( Pid ),
     ProcAlive2 = is_process_alive( Pid ),
-    ExpEventRes = { ok, [ "EVENT", "SomeEvent" ] },
+    ExpEventRes = { ok, [ ?EVENT, "SomeEvent" ] },
 
     [ { "server started", ?_assert( ProcAlive ) }
     , { "receive event",
@@ -360,11 +360,11 @@ server_scenario_async_test_() ->
         ?DRIVER_TIMEOUT -> timeout
     end,
     ProcAlive2 = is_process_alive( Pid ),
-    ExpEventRes = { ok, [ "EVENT", "SomeEvent" ] },
+    ExpEventRes = { ok, [ ?EVENT, "SomeEvent" ] },
 
     [ { "server pid alive", ?_assert( ProcAlive ) }
     , { "receive event", ?_assertEqual(
-                            { ok, [ "EVENT", "SomeEvent" ] },
+                            { ok, [ ?EVENT, "SomeEvent" ] },
                             ResEvent ) }
     , { "server stopped", ?_assertEqual( ok , ResStop ) }
     , { "server pid not alive", ?_assertNot( ProcAlive2 ) }
