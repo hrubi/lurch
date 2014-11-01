@@ -1,0 +1,12 @@
+{
+  "devices": [
+    {
+      "sample": {
+        "driver": "test/echo.sh",
+        "parameters": [],
+        "events": []
+      }
+    }
+
+  ]
+}
