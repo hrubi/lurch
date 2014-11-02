@@ -119,8 +119,8 @@ handle_call( stop, _From, State ) ->
 handle_cast( { poll_device_event, DeviceId, Event }, State ) ->
     case maybe_get_device_pid( DeviceId, Event, State#state.devices ) of
         { ok, Pid } ->
-            Token = lurch_dev:request_event_async( Pid, Event ),
-            NewState = State#state{ polls = [ Token | State#state.polls ] },
+            { ok, Tag } = lurch_dev:request_event_async( Pid, Event ),
+            NewState = State#state{ polls = [ Tag | State#state.polls ] },
             { noreply, NewState };
         _ ->
             % FIXME - log?
@@ -265,9 +265,9 @@ test_add_list_devices( Pid ) ->
 
 
 test_poll_device_event( Pid ) ->
-    Token = make_ref(),
+    Tag = make_ref(),
     meck:expect( lurch_dev, request_event_async,
-                 fun( _, _ ) -> Token end ),
+                 fun( _, _ ) -> { ok, Tag } end ),
     DeviceId = make_ref(),
     Event = myevent,
     Device = #device{ id = DeviceId, events = [ Event ] },
@@ -277,7 +277,7 @@ test_poll_device_event( Pid ) ->
     { noreply, S2 } = handle_cast( { poll_device_event, invalid, Event }, S0 ),
     { noreply, S3 } = handle_cast( { poll_device_event, DeviceId, invalid }, S0 ),
 
-    [ { "valid device and event", ?_assertEqual( [ Token ], S1#state.polls ) }
+    [ { "valid device and event", ?_assertEqual( [ Tag ], S1#state.polls ) }
     , { "invalid device", ?_assertEqual( S0, S2 ) }
     , { "invalid event", ?_assertEqual( S0, S3 ) }
     ].
