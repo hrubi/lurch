@@ -24,12 +24,12 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--spec start( ) -> ignore | { error, term()} | { ok, pid() }.
-start( ) ->
+-spec start() -> ignore | { error, term()} | { ok, pid() }.
+start() ->
     gen_server:start( ?MODULE, [], [] ).
 
--spec start_link( ) -> ignore | { error, term()} | { ok, pid() }.
-start_link( ) ->
+-spec start_link() -> ignore | { error, term()} | { ok, pid() }.
+start_link() ->
     gen_server:start_link( ?MODULE, [], [] ).
 
 -spec stop( pid() ) -> ok.
@@ -79,9 +79,10 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Driver = proplists:get_value(driver, Configuration),
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
+    % FIXME - lurch_dev:start_async
     case lurch_dev:start( Driver, Parameters ) of
         { ok, Pid } ->
-            DeviceId = make_ref( ),
+            DeviceId = make_ref(),
             Device = #device{ id = DeviceId
                             , driver = Driver
                             , parameters = Parameters
@@ -180,34 +181,34 @@ device_to_proplist( Device ) ->
 -define( EVENT_NAME, <<"event_one">> ).
 
 % Test descriptions
-server_test_( ) ->
+server_test_() ->
     { "start and stop server"
     , ?setup( test_is_alive ) }.
 
 
-device_start_stop_test_( ) ->
+device_start_stop_test_() ->
     { "start and stop device"
     , ?setup( test_start_stop_device ) }.
 
 
-device_start_error_test_( ) ->
+device_start_error_test_() ->
     { "start device error"
     , ?setup( test_start_device_error ) }.
 
 
-device_list_test_( ) ->
+device_list_test_() ->
     { "add and list devices"
     , ?setup( test_add_list_devices ) }.
 
 
-device_poll_event_test_( ) ->
+device_poll_event_test_() ->
     { "poll events"
     , ?setup( test_poll_device_event ) }.
 
 
 % setup functions
-test_start( ) ->
-    { ok, Pid } = start( ),
+test_start() ->
+    { ok, Pid } = start(),
     meck:new( lurch_dev, [] ),
     meck:expect( lurch_dev, start,
                  fun( _Driver, _Parameters ) -> { ok, pid_mock } end ),
@@ -228,7 +229,7 @@ test_is_alive( Pid ) ->
 
 test_start_stop_device( Pid ) ->
     DeviceCount = 2,
-    StartResults = [ start_device( Pid, dummy_driver_config( ) ) ||
+    StartResults = [ start_device( Pid, dummy_driver_config() ) ||
                     _N <- lists:seq( 1, DeviceCount ) ],
     StopResults = [ stop_device( Pid, element( 2, StartResult ) ) ||
                     StartResult <- StartResults ],
@@ -242,17 +243,17 @@ test_start_stop_device( Pid ) ->
 test_start_device_error( Pid ) ->
     meck:expect( lurch_dev, start,
                  fun( _Driver, _Parameters ) -> { error, enoent } end ),
-    StartResult = start_device( Pid, dummy_driver_config( ) ),
+    StartResult = start_device( Pid, dummy_driver_config() ),
     [ { "error propagated", ?_assertMatch( { error, _Error }, StartResult ) } ].
 
 
 test_add_list_devices( Pid ) ->
     DeviceCount = 2,
-    StartDeviceOk = fun( ) ->
+    StartDeviceOk = fun() ->
         { ok, DeviceId } = start_device( Pid, dummy_driver_config() ),
         DeviceId
     end,
-    DeviceIds = [ StartDeviceOk( ) || _N <- lists:seq( 1, DeviceCount ) ],
+    DeviceIds = [ StartDeviceOk() || _N <- lists:seq( 1, DeviceCount ) ],
     { ok, Result } = list_devices( Pid ),
     GetDeviceFields = fun( Field, Devices ) ->
         [ proplists:get_value( Field, Device ) || Device <- Devices ]
@@ -284,7 +285,7 @@ test_poll_device_event( Pid ) ->
 
 
 % Helper functions
-dummy_driver_config( ) ->
+dummy_driver_config() ->
     [ { driver, ?DRIVER_NAME }
     , { parameters, [] }
     , { events, [ ?EVENT_NAME ] }
