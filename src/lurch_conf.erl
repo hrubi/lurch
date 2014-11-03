@@ -10,7 +10,9 @@
     [ read_devices/1
 	] ).
 
--spec read_devices( file:name_all() ) -> list( proplists:property() ).
+% API functions
+
+-spec read_devices( file:name_all() ) -> list( list( proplists:property() ) ).
 read_devices( Name ) ->
     read_conf( Name, fun parse_devices/1 ).
 
