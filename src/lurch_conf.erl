@@ -49,7 +49,6 @@ parse_device( Device ) ->
 
 read_devices_test_() ->
     [ D ] = read_devices( test_conf_file( "devices" ) ),
-    io:format( user, "~p~n", [ D ] ),
     [ ?_assertEqual( <<"test/random.sh">>,
                      proplists:get_value( <<"driver">>, D ) )
     , ?_assertEqual( [], proplists:get_value( <<"events">>, D ) )
