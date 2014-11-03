@@ -126,7 +126,8 @@ handle_cast( { start_driver, Driver, Params, { Pid, Tag } }, #state{} ) ->
             Pid ! { { ok, self() }, Tag },
             { noreply, #state{ port = Port } };
         Error ->
-            Pid ! { Error, Tag }
+            Pid ! { Error, Tag },
+            { stop, Error , #state{ } }
     end;
 
 handle_cast( { stop, { Pid, Tag } }, State ) ->
