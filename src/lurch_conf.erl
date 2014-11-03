@@ -38,7 +38,28 @@ parse_devices( Devices ) ->
 
 parse_device( Device ) ->
     { [ { Name, { Opts } } ] } = Device,
-    [ { <<"name">>, Name } | Opts ].
+    key_to_atom(
+        value_to_string(
+            [ { <<"name">>, Name } | Opts ]
+    ) ).
+
+key_to_atom( Proplist ) ->
+    lists:map(
+        fun
+            ( { K, V } ) when is_binary( K ) -> { binary_to_atom( K, utf8 ), V };
+            ( Other ) -> Other
+        end,
+        Proplist
+     ).
+
+value_to_string( PropList ) ->
+    lists:map(
+        fun
+            ( { K, V } ) when is_binary( V ) -> { K, binary_to_list( V ) };
+            ( Other ) -> Other
+        end,
+        PropList
+    ).
 
 
 %% ===================================================================
@@ -49,12 +70,24 @@ parse_device( Device ) ->
 
 read_devices_test_() ->
     [ D ] = read_devices( test_conf_file( "devices" ) ),
-    [ ?_assertEqual( <<"test/random.sh">>,
-                     proplists:get_value( <<"driver">>, D ) )
-    , ?_assertEqual( [], proplists:get_value( <<"events">>, D ) )
-    , ?_assertEqual( <<"sample">>, proplists:get_value( <<"name">>, D ) )
-    , ?_assertEqual( [], proplists:get_value( <<"parameters">>, D ) )
+    [ ?_assertEqual( "test/random.sh",
+                     proplists:get_value( driver, D ) )
+    , ?_assertEqual( [], proplists:get_value( events, D ) )
+    , ?_assertEqual( "sample", proplists:get_value( name, D ) )
+    , ?_assertEqual( [], proplists:get_value( parameters, D ) )
     ].
+
+key_to_atom_test_() ->
+    L = [ { <<"bin">>, 1 }, 1, { 1, 2 }, { 1, 2, 3 } ],
+    Exp = [ { bin, 1 }, 1, { 1, 2 }, { 1, 2, 3 } ],
+    Res = key_to_atom( L ),
+    [ ?_assertEqual( Exp, Res ) ].
+
+value_to_string_test_() ->
+    L = [ { 1, <<"bin">> }, 1, { 1, 2 }, { 1, 2, 3 } ],
+    Exp = [ { 1, "bin" }, 1, { 1, 2 }, { 1, 2, 3 } ],
+    Res = value_to_string( L ),
+    [ ?_assertEqual( Exp, Res ) ].
 
 
 % Helper functions
