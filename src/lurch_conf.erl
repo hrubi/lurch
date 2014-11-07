@@ -70,7 +70,7 @@ value_to_string( PropList ) ->
 
 read_devices_test_() ->
     [ D ] = read_devices( test_conf_file( "devices" ) ),
-    [ ?_assertEqual( "test/random.sh",
+    [ ?_assertEqual( "test/echo.sh",
                      proplists:get_value( driver, D ) )
     , ?_assertEqual( [], proplists:get_value( events, D ) )
     , ?_assertEqual( "sample", proplists:get_value( name, D ) )
