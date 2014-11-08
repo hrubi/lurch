@@ -57,19 +57,19 @@ start_link( Driver, Parameters ) ->
 -spec start_async( binary(), [ binary() ] ) -> { ok, msg_tag() }.
 start_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
-    { ok, _ } = gen_server:start(
+    { ok, Pid } = gen_server:start(
                   ?MODULE,
                   { async, Driver, Parameters, From }, [] ),
-    { ok, Tag }.
+    { ok, Pid, Tag }.
 
 
 -spec start_link_async( binary(), [ binary() ] ) -> { ok, msg_tag() }.
 start_link_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
-    { ok, _ } = gen_server:start_link(
+    { ok, Pid } = gen_server:start_link(
                   ?MODULE,
                   { async, Driver, Parameters, From }, [] ),
-    { ok, Tag }.
+    { ok, Pid, Tag }.
 
 
 -spec stop( pid() ) -> ok.
@@ -339,7 +339,7 @@ server_scenario_test_() ->
     ].
 
 server_scenario_async_test_() ->
-    { ok, From } = start_test_server_async( "echo.sh" ),
+    { ok, Pid, From } = start_test_server_async( "echo.sh" ),
     { ok, Pid } = receive
         { Res1, From } -> Res1
     after
