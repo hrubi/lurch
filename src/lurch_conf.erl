@@ -40,7 +40,7 @@ parse_device( Device ) ->
     { [ { Name, { Opts } } ] } = Device,
     key_to_atom(
         value_to_string(
-            [ { <<"name">>, Name } | Opts ]
+            [ { name, Name } | Opts ]
     ) ).
 
 key_to_atom( Proplist ) ->
