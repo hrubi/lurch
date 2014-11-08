@@ -20,7 +20,7 @@ clean:
 clean-deps:
 	rm -rf deps
 
-test: deps
+test: compile
 	$(REBAR) eunit skip_deps=true
 
 dialyze:
