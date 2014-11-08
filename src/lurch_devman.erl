@@ -36,7 +36,7 @@ start_link() ->
 stop( Server ) ->
     gen_server:call( Server, stop ).
 
--type device_id() :: reference().
+-type device_id() :: pid().
 
 -spec start_device( pid(), list() ) -> { ok, device_id() }.
 start_device( Server, Configuration ) ->

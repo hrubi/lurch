@@ -54,7 +54,7 @@ start_link( Driver, Parameters ) ->
     gen_server:start_link( ?MODULE, { sync, Driver, Parameters }, [] ).
 
 
--spec start_async( binary(), [ binary() ] ) -> { ok, msg_tag() }.
+-spec start_async( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
 start_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
     { ok, Pid } = gen_server:start(
@@ -63,7 +63,7 @@ start_async( Driver, Parameters ) ->
     { ok, Pid, Tag }.
 
 
--spec start_link_async( binary(), [ binary() ] ) -> { ok, msg_tag() }.
+-spec start_link_async( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
 start_link_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
     { ok, Pid } = gen_server:start_link(
