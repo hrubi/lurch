@@ -123,7 +123,7 @@ handle_call( { get_event, Event }, _From, State ) ->
 handle_cast( { start_driver, Driver, Params, { Pid, Tag } }, #state{} ) ->
     case start_driver( Driver, Params ) of
         { ok, Port } ->
-            Pid ! { { ok, self() }, Tag },
+            Pid ! { ok, Tag },
             { noreply, #state{ port = Port } };
         Error ->
             Pid ! { Error, Tag },
@@ -340,7 +340,7 @@ server_scenario_test_() ->
 
 server_scenario_async_test_() ->
     { ok, Pid, From } = start_test_server_async( "echo.sh" ),
-    { ok, Pid } = receive
+    ok = receive
         { Res1, From } -> Res1
     after
         ?DRIVER_TIMEOUT -> timeout
