@@ -130,13 +130,13 @@ handle_info( { Msg, Tag }, State ) ->
     case orddict:find( Tag, State#state.asyncs ) of
         { ok, { Pid, Action } } ->
             Asyncs = orddict:erase( Tag, State#state.asyncs ),
-            S1 = State#state{ asyncs = Asyncs },
-            S2 = case Action of
-                poll -> handle_poll( Msg, Pid, S1 );
-                start -> handle_start( Msg, Pid, S1 );
-                stop -> handle_stop( Msg, Pid, S1 )
+            State1 = State#state{ asyncs = Asyncs },
+            State2 = case Action of
+                poll -> handle_poll( Msg, Pid, State1 );
+                start -> handle_start( Msg, Pid, State1 );
+                stop -> handle_stop( Msg, Pid, State1 )
             end,
-            { noreply, S2 };
+            { noreply, State2 };
         error -> { noreply, State }
     end.
 
