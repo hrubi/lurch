@@ -334,6 +334,7 @@ test_start_response( ok ) ->
 
     { noreply, S1 } = handle_info( { ok, Tag }, S0 ),
     { noreply, S2 } = handle_info( { { error, reason }, Tag }, S0 ),
+    { noreply, S3 } = handle_info( { ok, make_ref() }, S0 ),
 
     [ { "async purged",
         ?_assertEqual( error, orddict:find( Tag, S1#state.asyncs ) ) }
@@ -344,6 +345,8 @@ test_start_response( ok ) ->
         ?_assertEqual( error, orddict:find( Tag, S2#state.asyncs ) ) }
     , { "start result error",
         ?_assertEqual( error, orddict:find( DeviceId, S2#state.devices ) ) }
+    , { "nonexisting tag",
+        ?_assertEqual( S0, S3 ) }
     ].
 
 
@@ -356,11 +359,14 @@ test_stop_response( ok ) ->
     S0 = #state{ devices = Devices, asyncs = Asyncs },
 
     { noreply, S1 } = handle_info( { ok, Tag }, S0 ),
+    { noreply, S2 } = handle_info( { ok, make_ref() }, S0 ),
 
     [ { "async purged",
         ?_assertEqual( error, orddict:find( Tag, S1#state.asyncs ) ) }
     , { "stop result ok",
         ?_assertEqual( error, orddict:find( DeviceId, S1#state.devices ) ) }
+    , { "nonexisting tag",
+        ?_assertEqual( S0, S2 ) }
     ].
 
 
