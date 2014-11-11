@@ -239,6 +239,11 @@ device_start_response_test_() ->
     , ?setup_meck( test_start_response ) }.
 
 
+device_stop_response_test_() ->
+    { "stop response"
+    , ?setup_meck( test_stop_response ) }.
+
+
 % setup functions
 setup_server() ->
     { ok, Pid } = start(),
@@ -324,9 +329,7 @@ test_start_response( ok ) ->
     Tag = make_ref(),
     Device = #device{ pid = DeviceId },
     Devices = orddict:store( DeviceId, Device, orddict:new() ),
-
     Asyncs = orddict:store( Tag, { DeviceId, start }, orddict:new() ),
-
     S0 = #state{ devices = Devices, asyncs = Asyncs },
 
     { noreply, S1 } = handle_info( { ok, Tag }, S0 ),
@@ -342,6 +345,24 @@ test_start_response( ok ) ->
     , { "start result error",
         ?_assertEqual( error, orddict:find( DeviceId, S2#state.devices ) ) }
     ].
+
+
+test_stop_response( ok ) ->
+    DeviceId = make_ref(),
+    Tag = make_ref(),
+    Device = #device{ pid = DeviceId, state = running },
+    Devices = orddict:store( DeviceId, Device, orddict:new() ),
+    Asyncs = orddict:store( Tag, { DeviceId, stop }, orddict:new() ),
+    S0 = #state{ devices = Devices, asyncs = Asyncs },
+
+    { noreply, S1 } = handle_info( { ok, Tag }, S0 ),
+
+    [ { "async purged",
+        ?_assertEqual( error, orddict:find( Tag, S1#state.asyncs ) ) }
+    , { "stop result ok",
+        ?_assertEqual( error, orddict:find( DeviceId, S1#state.devices ) ) }
+    ].
+
 
 
 % Helper functions
