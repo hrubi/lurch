@@ -203,7 +203,11 @@ handle_poll( _Msg, _Pid, State ) ->
 -ifdef( TEST ).
 -include_lib( "eunit/include/eunit.hrl" ).
 
--define( setup( F ), { setup, fun test_start/0, fun test_stop/1, fun F/1 } ).
+-define( setup_server( F ),
+         { setup, fun setup_server/0, fun setup_server_stop/1, fun F/1 } ).
+
+-define( setup_meck( F ),
+         { setup, fun setup_meck/0, fun setup_meck_stop/1, fun F/1 } ).
 
 -define( DRIVER_NAME, <<"dummy">> ).
 
@@ -212,33 +216,33 @@ handle_poll( _Msg, _Pid, State ) ->
 % Test descriptions
 server_test_() ->
     { "start and stop server"
-    , ?setup( test_is_alive ) }.
+    , ?setup_server( test_is_alive ) }.
 
 
 device_start_stop_test_() ->
     { "start and stop device"
-    , ?setup( test_start_stop_device ) }.
+    , ?setup_server( test_start_stop_device ) }.
 
 
 device_list_test_() ->
     { "add and list devices"
-    , ?setup( test_add_list_devices ) }.
+    , ?setup_server( test_add_list_devices ) }.
 
 
 device_poll_event_test_() ->
     { "poll events"
-    , ?setup( test_poll_device_event ) }.
+    , ?setup_meck( test_poll_device_event ) }.
 
 
 device_start_response_test_() ->
     { "start response"
-    , ?setup( test_start_response ) }.
+    , ?setup_meck( test_start_response ) }.
 
 
 % setup functions
-test_start() ->
+setup_server() ->
     { ok, Pid } = start(),
-    meck:new( lurch_dev, [] ),
+    ok = setup_meck(),
     meck:expect( lurch_dev, start_async,
                  fun( _Driver, _Parameters ) -> { ok, make_ref(), make_ref() } end ),
     meck:expect( lurch_dev, stop_async,
@@ -246,9 +250,19 @@ test_start() ->
     Pid.
 
 
-test_stop( Pid ) ->
-    meck:unload( lurch_dev ),
+setup_server_stop( Pid ) ->
+    setup_meck_stop( ok ),
     stop( Pid ).
+
+
+setup_meck() ->
+    meck:new( lurch_dev, [] ),
+    ok.
+
+
+setup_meck_stop( ok ) ->
+    meck:unload( lurch_dev ).
+
 
 
 % Actual tests
@@ -285,7 +299,7 @@ test_add_list_devices( Pid ) ->
     ].
 
 
-test_poll_device_event( _Pid ) ->
+test_poll_device_event( ok ) ->
     Tag = make_ref(),
     meck:expect( lurch_dev, request_event_async,
                  fun( _, _ ) -> { ok, Tag } end ),
@@ -305,7 +319,7 @@ test_poll_device_event( _Pid ) ->
     , { "invalid event", ?_assertEqual( S0, S3 ) }
     ].
 
-test_start_response( _Pid ) ->
+test_start_response( ok ) ->
     DeviceId = make_ref(),
     Tag = make_ref(),
     Device = #device{ pid = DeviceId },
