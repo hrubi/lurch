@@ -144,6 +144,9 @@ handle_info( _Info, State ) ->
     { noreply, State }.
 
 
+terminate( normal, _State ) ->
+    ok;
+
 terminate( _Reason, State ) ->
     stop_driver( State#state.port ).
 
