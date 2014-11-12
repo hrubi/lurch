@@ -9,13 +9,9 @@
 % API functions
 -export(
     [ start/2
-    , start_async/2
     , start_link/2
-    , start_link_async/2
     , stop/1
-    , stop_async/1
     , request_event/2
-    , request_event_async/2
     ] ).
 
 % gen_server callbacks
@@ -44,50 +40,33 @@
 %% API functions
 %% ===================================================================
 
--spec start( binary(), [ binary() ] ) -> { ok, pid() } | { error, term() }.
+-spec start( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
 start( Driver, Parameters ) ->
-    gen_server:start( ?MODULE, { sync, Driver, Parameters }, [] ).
-
-
--spec start_link( binary(), [ binary() ] ) -> { ok, pid() } | { error, term() }.
-start_link( Driver, Parameters ) ->
-    gen_server:start_link( ?MODULE, { sync, Driver, Parameters }, [] ).
-
-
--spec start_async( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
-start_async( Driver, Parameters ) ->
     { _, Tag } = From = from(),
     { ok, Pid } = gen_server:start(
                   ?MODULE,
-                  { async, Driver, Parameters, From }, [] ),
+                  { Driver, Parameters, From }, [] ),
     { ok, Pid, Tag }.
 
 
--spec start_link_async( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
-start_link_async( Driver, Parameters ) ->
+-spec start_link( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
+start_link( Driver, Parameters ) ->
     { _, Tag } = From = from(),
     { ok, Pid } = gen_server:start_link(
                   ?MODULE,
-                  { async, Driver, Parameters, From }, [] ),
+                  { Driver, Parameters, From }, [] ),
     { ok, Pid, Tag }.
 
 
--spec stop( pid() ) -> ok.
+-spec stop( pid() ) -> { ok, msg_tag() }.
 stop( Pid ) ->
-    gen_server:call( Pid, stop, ?CALL_TIMEOUT ).
-
--spec stop_async( pid() ) -> { ok, msg_tag() }.
-stop_async( Pid ) ->
     { _, Tag } = From = from(),
     ok = gen_server:cast( Pid, { stop, From } ),
     { ok, Tag }.
 
--spec request_event( pid(), string() ) -> { ok, term() } | { error, timeout }.
-request_event( Pid, Event ) ->
-    gen_server:call( Pid, { get_event, Event }, ?CALL_TIMEOUT ).
 
--spec request_event_async( pid(), string() ) -> { ok, msg_tag() }.
-request_event_async( Pid, Event ) ->
+-spec request_event( pid(), string() ) -> { ok, msg_tag() }.
+request_event( Pid, Event ) ->
     { _, Tag } = From = from(),
     ok = gen_server:cast( Pid, { get_event, Event, From } ),
     { ok, Tag }.
@@ -99,15 +78,7 @@ request_event_async( Pid, Event ) ->
 
 -record( state, { port :: port() | undefined } ).
 
-init( { sync, Driver, Params } ) ->
-    case start_driver( Driver, Params ) of
-        { ok, Port } ->
-            { ok, #state{ port = Port } };
-        { error, Error } ->
-            { stop, Error }
-    end;
-
-init( { async, Driver, Params, From } ) ->
+init( { Driver, Params, From } ) ->
     ok = gen_server:cast( self(), { start_driver, Driver, Params, From } ),
     { ok, #state{} }.
 
@@ -325,24 +296,8 @@ stop_idempotent_test_() ->
 
 % server tests - API
 
-server_scenario_test_() ->
-    { ok, Pid } = start_test_server( "echo.sh" ),
-    ProcAlive = is_process_alive( Pid ),
-    ResEvent = request_event( Pid, "SomeEvent" ),
-    ResStop = stop( Pid ),
-    ProcAlive2 = is_process_alive( Pid ),
-    ExpEventRes = { ok, [ ?EVENT, "SomeEvent" ] },
-
-    [ { "server started", ?_assert( ProcAlive ) }
-    , { "receive event",
-        ?_assertEqual( ExpEventRes, ResEvent ) }
-    , { "server stopped",
-        ?_assertEqual( ok, ResStop ) }
-    , { "server pid not alive", ?_assertNot( ProcAlive2 ) }
-    ].
-
-server_scenario_async_test_() ->
-    { ok, Pid, From } = start_test_server_async( "echo.sh" ),
+server_scenario() ->
+    { ok, Pid, From } = start_test_server( "echo.sh" ),
     ok = receive
         { Res1, From } -> Res1
     after
@@ -350,14 +305,14 @@ server_scenario_async_test_() ->
     end,
     ProcAlive = is_process_alive( Pid ),
 
-    { ok, From2 } = request_event_async( Pid, "SomeEvent" ),
+    { ok, From2 } = request_event( Pid, "SomeEvent" ),
     ResEvent = receive
         { Res2, From2 } -> Res2
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
 
-    { ok, From3 } = stop_async( Pid ),
+    { ok, From3 } = stop( Pid ),
     ResStop = receive
         { Res3, From3 } -> Res3
     after
@@ -385,9 +340,6 @@ start_test_driver( Name ) ->
 
 start_test_server( Name ) ->
     start( test_driver_path( Name ), [] ).
-
-start_test_server_async( Name ) ->
-    start_async( test_driver_path( Name ), [] ).
 
 
 mock_lurch_os() ->

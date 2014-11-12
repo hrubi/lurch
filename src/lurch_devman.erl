@@ -79,7 +79,7 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Driver = proplists:get_value(driver, Configuration),
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
-    { ok, Pid, Tag } = lurch_dev:start_async( Driver, Parameters ),
+    { ok, Pid, Tag } = lurch_dev:start( Driver, Parameters ),
     Device = #device{ pid = Pid
                     , driver = Driver
                     , parameters = Parameters
@@ -93,7 +93,7 @@ handle_call( { start_device, Configuration }, _From, State ) ->
 handle_call( { stop_device, Pid }, _From, State ) ->
     case orddict:find( Pid, State#state.devices ) of
         { ok, _Device } ->
-            { ok, Tag } = lurch_dev:stop_async( Pid ),
+            { ok, Tag } = lurch_dev:stop( Pid ),
             Asyncs = orddict:store( Tag, { Pid, stop }, State#state.asyncs ),
             { reply, ok, State#state{ asyncs = Asyncs } };
         error -> {reply, { error, no_such_device }, State }
@@ -114,7 +114,7 @@ handle_call( stop, _From, State ) ->
 handle_cast( { poll_device_event, Pid, Event }, State ) ->
     case device_event_exists( Pid, Event, State#state.devices ) of
         ok ->
-            { ok, Tag } = lurch_dev:request_event_async( Pid, Event ),
+            { ok, Tag } = lurch_dev:request_event( Pid, Event ),
             Asyncs = orddict:store( Tag, { Pid, poll }, State#state.asyncs ),
             { noreply, State#state{ asyncs = Asyncs } };
         _ ->
@@ -248,9 +248,9 @@ device_stop_response_test_() ->
 setup_server() ->
     { ok, Pid } = start(),
     ok = setup_meck(),
-    meck:expect( lurch_dev, start_async,
+    meck:expect( lurch_dev, start,
                  fun( _Driver, _Parameters ) -> { ok, make_ref(), make_ref() } end ),
-    meck:expect( lurch_dev, stop_async,
+    meck:expect( lurch_dev, stop,
                  fun( _Port ) -> { ok, make_ref() } end ),
     Pid.
 
@@ -306,7 +306,7 @@ test_add_list_devices( Pid ) ->
 
 test_poll_device_event( ok ) ->
     Tag = make_ref(),
-    meck:expect( lurch_dev, request_event_async,
+    meck:expect( lurch_dev, request_event,
                  fun( _, _ ) -> { ok, Tag } end ),
     DeviceId = make_ref(),
     Event = myevent,
