@@ -36,30 +36,29 @@ start_link() ->
 stop( Server ) ->
     gen_server:call( Server, stop ).
 
--type device_id() :: pid().
+-type device_id() :: term().
 
 -spec start_device( pid(), list() ) -> { ok, device_id() }.
 start_device( Server, Configuration ) ->
     gen_server:call( Server, { start_device, Configuration } ).
 
 -spec stop_device( pid(), device_id() ) -> ok | { error | no_such_device }.
-stop_device( Server, Pid ) ->
-    gen_server:call( Server, { stop_device, Pid } ).
+stop_device( Server, Device ) ->
+    gen_server:call( Server, { stop_device, Device } ).
 
 -spec list_devices( pid() ) ->  { ok, [ [ proplists:property() ] ] }.
 list_devices( Server ) ->
     gen_server:call( Server, list_devices ).
 
 -spec poll_device_event( pid() , device_id(), binary() ) -> ok.
-poll_device_event( Server, Pid, Event ) ->
-    gen_server:cast( Server, { poll_device_event, Pid, Event } ).
+poll_device_event( Server, Device, Event ) ->
+    gen_server:cast( Server, { poll_device_event, Device, Event } ).
 
 %% ===================================================================
 %% gen_server callbacks
 %% ===================================================================
 -record( device,
     { id         :: term()
-    , pid        :: pid()
     , driver     :: binary()
     , parameters :: [ binary() ]
     , events     :: [ binary() ]
@@ -80,22 +79,21 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Driver = proplists:get_value(driver, Configuration),
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
-    Id = make_ref(),
-    { ok, Pid } = lurch_dev:start( Id, Driver, Parameters ),
-    Device = #device{ id = Id
-                    , pid = Pid
+    Name = make_ref(),
+    { ok, DeviceId } = lurch_dev:start( Name, Driver, Parameters ),
+    Device = #device{ id = DeviceId
                     , driver = Driver
                     , parameters = Parameters
                     , events = Events
                     , state = starting },
-    Devices = orddict:store( Id, Device, State#state.devices ),
+    Devices = orddict:store( DeviceId, Device, State#state.devices ),
     NewState = State#state{ devices = Devices },
-    { reply, { ok, Id }, NewState };
+    { reply, { ok, DeviceId }, NewState };
 
-handle_call( { stop_device, Id }, _From, State ) ->
-    case orddict:find( Id, State#state.devices ) of
-        { ok, Device } ->
-            { reply, ok = lurch_dev:stop( Device#device.pid ), State };
+handle_call( { stop_device, DeviceId }, _From, State ) ->
+    case orddict:find( DeviceId, State#state.devices ) of
+        { ok, _Device } ->
+            { reply, ok = lurch_dev:stop( DeviceId ), State };
         error -> {reply, { error, no_such_device }, State }
     end;
 
@@ -111,11 +109,11 @@ handle_call( stop, _From, State ) ->
     { stop, shutdown, ok, State }.
 
 
-handle_cast( { poll_device_event, Pid, Event }, State ) ->
-    case device_event_exists( Pid, Event, State#state.devices ) of
+handle_cast( { poll_device_event, Device, Event }, State ) ->
+    case device_event_exists( Device, Event, State#state.devices ) of
         ok ->
-            { ok, Tag } = lurch_dev:request_event( Pid, Event ),
-            Asyncs = orddict:store( Tag, Pid, State#state.asyncs ),
+            { ok, Tag } = lurch_dev:request_event( Device, Event ),
+            Asyncs = orddict:store( Tag, Device, State#state.asyncs ),
             { noreply, State#state{ asyncs = Asyncs } };
         _ ->
             % FIXME - log?
@@ -148,8 +146,8 @@ code_change( _OldVsn, State, _Extra ) ->
 %% Internal functions
 %% ===================================================================
 
-device_event_exists( Pid, Event, Devices ) ->
-    case orddict:find( Pid, Devices ) of
+device_event_exists( DeviceId, Event, Devices ) ->
+    case orddict:find( DeviceId, Devices ) of
         { ok, Device } ->
             case lists:member( Event, Device#device.events ) of
                 true -> ok;
@@ -166,35 +164,35 @@ device_to_proplist( Device ) ->
     , { events, Device#device.events }
     ].
 
-handle_start( Msg, Pid, State ) ->
+handle_start( Msg, DeviceId, State ) ->
     case Msg of
         ok ->
             Devices = orddict:update(
-                Pid,
+                DeviceId,
                 fun( D ) -> D#device{ state = running } end,
                 State#state.devices
             ),
             State#state{ devices = Devices };
         { error, _Reason } ->
             % FIXME - log
-            Devices = orddict:erase( Pid, State#state.devices ),
+            Devices = orddict:erase( DeviceId, State#state.devices ),
             State#state{ devices = Devices }
     end.
 
-handle_stop( ok, Pid, State ) ->
-    Devices = orddict:erase( Pid, State#state.devices ),
+handle_stop( ok, DeviceId, State ) ->
+    Devices = orddict:erase( DeviceId, State#state.devices ),
     State#state{ devices = Devices }.
 
-handle_poll( _Msg, _Pid, State ) ->
+handle_poll( _Msg, _DeviceId, State ) ->
     % FIXME - propagate to subscribers
     State.
 
 handle_async( Tag, Msg, Fun, State ) ->
     case orddict:find( Tag, State#state.asyncs ) of
-        { ok, Pid } ->
+        { ok, DeviceId } ->
             Asyncs = orddict:erase( Tag, State#state.asyncs ),
             State1 = State#state{ asyncs = Asyncs },
-            State2 = Fun( Msg, Pid, State1 ),
+            State2 = Fun( Msg, DeviceId, State1 ),
             { noreply, State2 };
         error ->
             { noreply, State }
@@ -311,7 +309,7 @@ test_add_list_devices( Pid ) ->
         [ proplists:get_value( Field, Device ) || Device <- Devices ]
     end,
     [ { "device count", ?_assertEqual( DeviceCount, length( Result ) ) }
-    , [ { "device pid", ?_assert( lists:member( DeviceId, DeviceIds ) ) }
+    , [ { "device id", ?_assert( lists:member( DeviceId, DeviceIds ) ) }
         || DeviceId <- GetDeviceFields( id, Result ) ]
     , [ { "driver name", ?_assertEqual( ?DRIVER_NAME, Driver ) } || Driver <- GetDeviceFields( driver, Result ) ]
     ].
@@ -323,7 +321,7 @@ test_poll_device_event( ok ) ->
                  fun( _, _ ) -> { ok, Tag } end ),
     DeviceId = make_ref(),
     Event = myevent,
-    Device = #device{ pid = DeviceId, events = [ Event ] },
+    Device = #device{ id = DeviceId, events = [ Event ] },
     S0 = #state{ devices = orddict:store( DeviceId, Device, orddict:new() ) },
 
     { noreply, S1 } = handle_cast( { poll_device_event, DeviceId, Event }, S0 ),

@@ -1,3 +1,6 @@
+% @copyright 2014, Jan Hruban
+
+
 -module( lurch_app ).
 
 -behaviour( application ).

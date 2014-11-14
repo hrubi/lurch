@@ -5,6 +5,7 @@
     , { applications,
         [ kernel
         , stdlib
+        , gproc
         ] }
     , {mod, { lurch_app, [] } }
     , {env, [] }
