@@ -18,7 +18,8 @@ clean:
 	$(REBAR) clean
 
 clean-deps:
-	rm -rf deps
+	$(REBAR) delete-deps
+	rm deps/init
 
 test: compile
 	$(REBAR) eunit skip_deps=true
