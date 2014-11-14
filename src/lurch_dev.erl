@@ -42,20 +42,12 @@
 
 -spec start( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
 start( Driver, Parameters ) ->
-    { _, Tag } = From = from(),
-    { ok, Pid } = gen_server:start(
-                  ?MODULE,
-                  { Driver, Parameters, From }, [] ),
-    { ok, Pid, Tag }.
+    start_server( fun gen_server:start/3, Driver, Parameters ).
 
 
 -spec start_link( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
 start_link( Driver, Parameters ) ->
-    { _, Tag } = From = from(),
-    { ok, Pid } = gen_server:start_link(
-                  ?MODULE,
-                  { Driver, Parameters, From }, [] ),
-    { ok, Pid, Tag }.
+    start_server( fun gen_server:start_link/3, Driver, Parameters ).
 
 
 -spec stop( pid() ) -> { ok, msg_tag() }.
@@ -216,6 +208,12 @@ driver_path( Driver ) ->
 -spec format_cmd( string(), [ string() ] ) -> string().
 format_cmd( Cmd, Data ) ->
     string:join( [ Cmd | Data ] ++ ["OK\n"], "\n" ).
+
+
+start_server( Fun, Driver, Parameters ) ->
+    { _, Tag } = From = from(),
+    { ok, Pid } = Fun( ?MODULE, { Driver, Parameters, From }, [] ),
+    { ok, Pid, Tag }.
 
 
 %% ===================================================================
