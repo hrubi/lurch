@@ -8,8 +8,8 @@
 
 % API functions
 -export(
-    [ start/2
-    , start_link/2
+    [ start/3
+    , start_link/3
     , stop/1
     , request_event/2
     ] ).
@@ -40,21 +40,19 @@
 %% API functions
 %% ===================================================================
 
--spec start( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
-start( Driver, Parameters ) ->
-    start_server( fun gen_server:start/3, Driver, Parameters ).
+-spec start( term(), binary(), [ binary() ] ) -> { ok, pid() }.
+start( Id, Driver, Parameters ) ->
+    start_server( fun gen_server:start/3, Id, Driver, Parameters ).
 
 
--spec start_link( binary(), [ binary() ] ) -> { ok, pid(), msg_tag() }.
-start_link( Driver, Parameters ) ->
-    start_server( fun gen_server:start_link/3, Driver, Parameters ).
+-spec start_link( term(), binary(), [ binary() ] ) -> { ok, pid() }.
+start_link( Id, Driver, Parameters ) ->
+    start_server( fun gen_server:start_link/3, Id, Driver, Parameters ).
 
 
--spec stop( pid() ) -> { ok, msg_tag() }.
+-spec stop( pid() ) -> ok.
 stop( Pid ) ->
-    { _, Tag } = From = from(),
-    ok = gen_server:cast( Pid, { stop, From } ),
-    { ok, Tag }.
+    gen_server:cast( Pid, { stop, self() } ).
 
 
 -spec request_event( pid(), string() ) -> { ok, msg_tag() }.
@@ -68,10 +66,13 @@ request_event( Pid, Event ) ->
 %% gen_server callbacks
 %% ===================================================================
 
--record( state, { port :: port() | undefined } ).
+-record( state,
+    { port :: port() | undefined
+    , id :: term()
+    } ).
 
-init( { Driver, Params, From } ) ->
-    ok = gen_server:cast( self(), { start_driver, Driver, Params, From } ),
+init( { Id, Driver, Params, From } ) ->
+    ok = gen_server:cast( self(), { start_driver, Id, Driver, Params, From } ),
     { ok, #state{} }.
 
 
@@ -83,19 +84,20 @@ handle_call( { get_event, Event }, _From, State ) ->
     { reply, get_event( State#state.port, Event ), State }.
 
 
-handle_cast( { start_driver, Driver, Params, { Pid, Tag } }, #state{} ) ->
+handle_cast( { start_driver, Id, Driver, Params, From }, #state{} = State0 ) ->
+    State1 = State0#state{ id = Id },
     case start_driver( Driver, Params ) of
         { ok, Port } ->
-            Pid ! { start, ok, Tag },
-            { noreply, #state{ port = Port } };
+            From ! { start, ok, Id },
+            { noreply, State1#state{ port = Port } };
         Error ->
-            Pid ! { start, Error, Tag },
-            { stop, Error , #state{ } }
+            From ! { start, Error, Id },
+            { stop, Error , State1 }
     end;
 
-handle_cast( { stop, { Pid, Tag } }, State ) ->
+handle_cast( { stop, From }, State ) ->
     ok = stop_driver( State#state.port ),
-    Pid ! { stop, ok, Tag },
+    From ! { stop, ok, State#state.id },
     { stop, normal, #state{} };
 
 handle_cast( { get_event, Event, { Pid, Tag } }, State ) ->
@@ -210,10 +212,8 @@ format_cmd( Cmd, Data ) ->
     string:join( [ Cmd | Data ] ++ ["OK\n"], "\n" ).
 
 
-start_server( Fun, Driver, Parameters ) ->
-    { _, Tag } = From = from(),
-    { ok, Pid } = Fun( ?MODULE, { Driver, Parameters, From }, [] ),
-    { ok, Pid, Tag }.
+start_server( Fun, Id, Driver, Parameters ) ->
+    Fun( ?MODULE, { Id, Driver, Parameters, self() }, [] ).
 
 
 %% ===================================================================
@@ -295,9 +295,10 @@ stop_idempotent_test_() ->
 % server tests - API
 
 server_scenario_test_() ->
-    { ok, Pid, From } = start_test_server( "echo.sh" ),
+    Id = make_ref(),
+    { ok, Pid } = start_test_server( Id, "echo.sh" ),
     ok = receive
-        { start, Res1, From } -> Res1
+        { start, Res1, Id } -> Res1
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
@@ -310,9 +311,9 @@ server_scenario_test_() ->
         ?DRIVER_TIMEOUT -> timeout
     end,
 
-    { ok, From3 } = stop( Pid ),
+    ok = stop( Pid ),
     ResStop = receive
-        { stop, Res3, From3 } -> Res3
+        { stop, Res3, Id } -> Res3
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
@@ -336,8 +337,8 @@ start_test_driver( Name ) ->
     start_driver( test_driver_path( Name ), [] ).
 
 
-start_test_server( Name ) ->
-    start( test_driver_path( Name ), [] ).
+start_test_server( Id, Name ) ->
+    start( Id, test_driver_path( Name ), [] ).
 
 
 mock_lurch_os() ->

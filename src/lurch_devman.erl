@@ -58,7 +58,8 @@ poll_device_event( Server, Pid, Event ) ->
 %% gen_server callbacks
 %% ===================================================================
 -record( device,
-    { pid        :: pid()
+    { id         :: term()
+    , pid        :: pid()
     , driver     :: binary()
     , parameters :: [ binary() ]
     , events     :: [ binary() ]
@@ -79,23 +80,22 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Driver = proplists:get_value(driver, Configuration),
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
-    { ok, Pid, Tag } = lurch_dev:start( Driver, Parameters ),
-    Device = #device{ pid = Pid
+    Id = make_ref(),
+    { ok, Pid } = lurch_dev:start( Id, Driver, Parameters ),
+    Device = #device{ id = Id
+                    , pid = Pid
                     , driver = Driver
                     , parameters = Parameters
                     , events = Events
                     , state = starting },
-    Devices = orddict:store( Pid, Device, State#state.devices ),
-    Asyncs = orddict:store( Tag, Pid, State#state.asyncs ),
-    NewState = State#state{ devices = Devices, asyncs = Asyncs },
-    { reply, { ok, Device#device.pid }, NewState };
+    Devices = orddict:store( Id, Device, State#state.devices ),
+    NewState = State#state{ devices = Devices },
+    { reply, { ok, Id }, NewState };
 
-handle_call( { stop_device, Pid }, _From, State ) ->
-    case orddict:find( Pid, State#state.devices ) of
-        { ok, _Device } ->
-            { ok, Tag } = lurch_dev:stop( Pid ),
-            Asyncs = orddict:store( Tag, Pid, State#state.asyncs ),
-            { reply, ok, State#state{ asyncs = Asyncs } };
+handle_call( { stop_device, Id }, _From, State ) ->
+    case orddict:find( Id, State#state.devices ) of
+        { ok, Device } ->
+            { reply, ok = lurch_dev:stop( Device#device.pid ), State };
         error -> {reply, { error, no_such_device }, State }
     end;
 
@@ -128,11 +128,11 @@ handle_cast( _Request, State ) ->
 handle_info( { event, Msg, Tag }, State ) ->
     handle_async( Tag, Msg, fun handle_poll/3, State );
 
-handle_info( { start, Msg, Tag }, State ) ->
-    handle_async( Tag, Msg, fun handle_start/3, State );
+handle_info( { start, Msg, Id }, State ) ->
+    handle_device_transition( Id, Msg, fun handle_start/3, State );
 
-handle_info( { stop, Msg, Tag }, State ) ->
-    handle_async( Tag, Msg, fun handle_stop/3, State ).
+handle_info( { stop, Msg, Id }, State ) ->
+    handle_device_transition( Id, Msg, fun handle_stop/3, State ).
 
 
 terminate( _Reason, _State ) ->
@@ -160,7 +160,7 @@ device_event_exists( Pid, Event, Devices ) ->
     end.
 
 device_to_proplist( Device ) ->
-    [ { pid, Device#device.pid }
+    [ { id, Device#device.id }
     , { driver, Device#device.driver }
     , { parameters, Device#device.parameters }
     , { events, Device#device.events }
@@ -196,6 +196,14 @@ handle_async( Tag, Msg, Fun, State ) ->
             State1 = State#state{ asyncs = Asyncs },
             State2 = Fun( Msg, Pid, State1 ),
             { noreply, State2 };
+        error ->
+            { noreply, State }
+    end.
+
+handle_device_transition( Id, Msg, Fun, State ) ->
+    case orddict:find( Id, State#state.devices ) of
+        { ok, _Device } ->
+            { noreply, Fun( Msg, Id, State ) };
         error ->
             { noreply, State }
     end.
@@ -254,9 +262,9 @@ setup_server() ->
     { ok, Pid } = start(),
     ok = setup_meck(),
     meck:expect( lurch_dev, start,
-                 fun( _Driver, _Parameters ) -> { ok, make_ref(), make_ref() } end ),
+                 fun( _Id, _Driver, _Parameters ) -> { ok, make_ref() } end ),
     meck:expect( lurch_dev, stop,
-                 fun( _Port ) -> { ok, make_ref() } end ),
+                 fun( _Port ) -> ok end ),
     Pid.
 
 
@@ -304,7 +312,7 @@ test_add_list_devices( Pid ) ->
     end,
     [ { "device count", ?_assertEqual( DeviceCount, length( Result ) ) }
     , [ { "device pid", ?_assert( lists:member( DeviceId, DeviceIds ) ) }
-        || DeviceId <- GetDeviceFields( pid, Result ) ]
+        || DeviceId <- GetDeviceFields( id, Result ) ]
     , [ { "driver name", ?_assertEqual( ?DRIVER_NAME, Driver ) } || Driver <- GetDeviceFields( driver, Result ) ]
     ].
 
@@ -330,47 +338,39 @@ test_poll_device_event( ok ) ->
     ].
 
 test_start_response( ok ) ->
-    DeviceId = make_ref(),
-    Tag = make_ref(),
-    Device = #device{ pid = DeviceId },
-    Devices = orddict:store( DeviceId, Device, orddict:new() ),
-    Asyncs = orddict:store( Tag, DeviceId, orddict:new() ),
-    S0 = #state{ devices = Devices, asyncs = Asyncs },
+    Id = make_ref(),
+    Device = #device{ id = Id },
+    Devices = orddict:store( Id, Device, orddict:new() ),
+    S0 = #state{ devices = Devices },
 
-    { noreply, S1 } = handle_info( { start, ok, Tag }, S0 ),
-    { noreply, S2 } = handle_info( { start, { error, reason }, Tag }, S0 ),
+    { noreply, S1 } = handle_info( { start, ok, Id }, S0 ),
+    { noreply, S2 } = handle_info( { start, { error, reason }, Id }, S0 ),
     { noreply, S3 } = handle_info( { start, ok, make_ref() }, S0 ),
 
-    [ { "async purged",
-        ?_assertEqual( error, orddict:find( Tag, S1#state.asyncs ) ) }
+    [ { "device id",
+        ?_assertEqual( Id, (orddict:fetch( Id, S1#state.devices ) )#device.id ) }
     , { "start result ok", ?_assertEqual(
             running,
-            (orddict:fetch( DeviceId, S1#state.devices ))#device.state ) }
-    , { "async purged",
-        ?_assertEqual( error, orddict:find( Tag, S2#state.asyncs ) ) }
+            (orddict:fetch( Id, S1#state.devices ))#device.state ) }
     , { "start result error",
-        ?_assertEqual( error, orddict:find( DeviceId, S2#state.devices ) ) }
-    , { "nonexisting tag",
+        ?_assertEqual( error, orddict:find( Id, S2#state.devices ) ) }
+    , { "nonexisting id",
         ?_assertEqual( S0, S3 ) }
     ].
 
 
 test_stop_response( ok ) ->
-    DeviceId = make_ref(),
-    Tag = make_ref(),
-    Device = #device{ pid = DeviceId, state = running },
-    Devices = orddict:store( DeviceId, Device, orddict:new() ),
-    Asyncs = orddict:store( Tag, DeviceId, orddict:new() ),
-    S0 = #state{ devices = Devices, asyncs = Asyncs },
+    Id = make_ref(),
+    Device = #device{ id = Id, state = running },
+    Devices = orddict:store( Id, Device, orddict:new() ),
+    S0 = #state{ devices = Devices },
 
-    { noreply, S1 } = handle_info( { stop, ok, Tag }, S0 ),
+    { noreply, S1 } = handle_info( { stop, ok, Id }, S0 ),
     { noreply, S2 } = handle_info( { stop, ok, make_ref() }, S0 ),
 
-    [ { "async purged",
-        ?_assertEqual( error, orddict:find( Tag, S1#state.asyncs ) ) }
-    , { "stop result ok",
-        ?_assertEqual( error, orddict:find( DeviceId, S1#state.devices ) ) }
-    , { "nonexisting tag",
+    [ { "stop result ok",
+        ?_assertEqual( error, orddict:find( Id, S1#state.devices ) ) }
+    , { "nonexisting id",
         ?_assertEqual( S0, S2 ) }
     ].
 
