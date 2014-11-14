@@ -296,7 +296,7 @@ stop_idempotent_test_() ->
 
 % server tests - API
 
-server_scenario() ->
+server_scenario_test_() ->
     { ok, Pid, From } = start_test_server( "echo.sh" ),
     ok = receive
         { Res1, From } -> Res1
