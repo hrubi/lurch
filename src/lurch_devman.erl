@@ -86,7 +86,7 @@ handle_call( { start_device, Configuration }, _From, State ) ->
                     , events = Events
                     , state = starting },
     Devices = orddict:store( Pid, Device, State#state.devices ),
-    Asyncs = orddict:store( Tag, { Pid, start } , State#state.asyncs ),
+    Asyncs = orddict:store( Tag, Pid, State#state.asyncs ),
     NewState = State#state{ devices = Devices, asyncs = Asyncs },
     { reply, { ok, Device#device.pid }, NewState };
 
@@ -94,7 +94,7 @@ handle_call( { stop_device, Pid }, _From, State ) ->
     case orddict:find( Pid, State#state.devices ) of
         { ok, _Device } ->
             { ok, Tag } = lurch_dev:stop( Pid ),
-            Asyncs = orddict:store( Tag, { Pid, stop }, State#state.asyncs ),
+            Asyncs = orddict:store( Tag, Pid, State#state.asyncs ),
             { reply, ok, State#state{ asyncs = Asyncs } };
         error -> {reply, { error, no_such_device }, State }
     end;
@@ -115,7 +115,7 @@ handle_cast( { poll_device_event, Pid, Event }, State ) ->
     case device_event_exists( Pid, Event, State#state.devices ) of
         ok ->
             { ok, Tag } = lurch_dev:request_event( Pid, Event ),
-            Asyncs = orddict:store( Tag, { Pid, poll }, State#state.asyncs ),
+            Asyncs = orddict:store( Tag, Pid, State#state.asyncs ),
             { noreply, State#state{ asyncs = Asyncs } };
         _ ->
             % FIXME - log?
@@ -125,20 +125,14 @@ handle_cast( { poll_device_event, Pid, Event }, State ) ->
 handle_cast( _Request, State ) ->
     { noreply, State }.
 
+handle_info( { event, Msg, Tag }, State ) ->
+    handle_async( Tag, Msg, fun handle_poll/3, State );
 
-handle_info( { Msg, Tag }, State ) ->
-    case orddict:find( Tag, State#state.asyncs ) of
-        { ok, { Pid, Action } } ->
-            Asyncs = orddict:erase( Tag, State#state.asyncs ),
-            State1 = State#state{ asyncs = Asyncs },
-            State2 = case Action of
-                poll -> handle_poll( Msg, Pid, State1 );
-                start -> handle_start( Msg, Pid, State1 );
-                stop -> handle_stop( Msg, Pid, State1 )
-            end,
-            { noreply, State2 };
-        error -> { noreply, State }
-    end.
+handle_info( { start, Msg, Tag }, State ) ->
+    handle_async( Tag, Msg, fun handle_start/3, State );
+
+handle_info( { stop, Msg, Tag }, State ) ->
+    handle_async( Tag, Msg, fun handle_stop/3, State ).
 
 
 terminate( _Reason, _State ) ->
@@ -194,6 +188,17 @@ handle_stop( ok, Pid, State ) ->
 handle_poll( _Msg, _Pid, State ) ->
     % FIXME - propagate to subscribers
     State.
+
+handle_async( Tag, Msg, Fun, State ) ->
+    case orddict:find( Tag, State#state.asyncs ) of
+        { ok, Pid } ->
+            Asyncs = orddict:erase( Tag, State#state.asyncs ),
+            State1 = State#state{ asyncs = Asyncs },
+            State2 = Fun( Msg, Pid, State1 ),
+            { noreply, State2 };
+        error ->
+            { noreply, State }
+    end.
 
 
 
@@ -318,7 +323,7 @@ test_poll_device_event( ok ) ->
     { noreply, S3 } = handle_cast( { poll_device_event, DeviceId, invalid }, S0 ),
 
     [ { "valid device and event",
-        ?_assertEqual( { ok, { DeviceId, poll } },
+        ?_assertEqual( { ok, DeviceId },
                        orddict:find( Tag, S1#state.asyncs ) ) }
     , { "invalid device", ?_assertEqual( S0, S2 ) }
     , { "invalid event", ?_assertEqual( S0, S3 ) }
@@ -329,12 +334,12 @@ test_start_response( ok ) ->
     Tag = make_ref(),
     Device = #device{ pid = DeviceId },
     Devices = orddict:store( DeviceId, Device, orddict:new() ),
-    Asyncs = orddict:store( Tag, { DeviceId, start }, orddict:new() ),
+    Asyncs = orddict:store( Tag, DeviceId, orddict:new() ),
     S0 = #state{ devices = Devices, asyncs = Asyncs },
 
-    { noreply, S1 } = handle_info( { ok, Tag }, S0 ),
-    { noreply, S2 } = handle_info( { { error, reason }, Tag }, S0 ),
-    { noreply, S3 } = handle_info( { ok, make_ref() }, S0 ),
+    { noreply, S1 } = handle_info( { start, ok, Tag }, S0 ),
+    { noreply, S2 } = handle_info( { start, { error, reason }, Tag }, S0 ),
+    { noreply, S3 } = handle_info( { start, ok, make_ref() }, S0 ),
 
     [ { "async purged",
         ?_assertEqual( error, orddict:find( Tag, S1#state.asyncs ) ) }
@@ -355,11 +360,11 @@ test_stop_response( ok ) ->
     Tag = make_ref(),
     Device = #device{ pid = DeviceId, state = running },
     Devices = orddict:store( DeviceId, Device, orddict:new() ),
-    Asyncs = orddict:store( Tag, { DeviceId, stop }, orddict:new() ),
+    Asyncs = orddict:store( Tag, DeviceId, orddict:new() ),
     S0 = #state{ devices = Devices, asyncs = Asyncs },
 
-    { noreply, S1 } = handle_info( { ok, Tag }, S0 ),
-    { noreply, S2 } = handle_info( { ok, make_ref() }, S0 ),
+    { noreply, S1 } = handle_info( { stop, ok, Tag }, S0 ),
+    { noreply, S2 } = handle_info( { stop, ok, make_ref() }, S0 ),
 
     [ { "async purged",
         ?_assertEqual( error, orddict:find( Tag, S1#state.asyncs ) ) }

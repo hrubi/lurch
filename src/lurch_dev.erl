@@ -94,20 +94,20 @@ handle_call( { get_event, Event }, _From, State ) ->
 handle_cast( { start_driver, Driver, Params, { Pid, Tag } }, #state{} ) ->
     case start_driver( Driver, Params ) of
         { ok, Port } ->
-            Pid ! { ok, Tag },
+            Pid ! { start, ok, Tag },
             { noreply, #state{ port = Port } };
         Error ->
-            Pid ! { Error, Tag },
+            Pid ! { start, Error, Tag },
             { stop, Error , #state{ } }
     end;
 
 handle_cast( { stop, { Pid, Tag } }, State ) ->
     ok = stop_driver( State#state.port ),
-    Pid ! { ok, Tag },
+    Pid ! { stop, ok, Tag },
     { stop, normal, #state{} };
 
 handle_cast( { get_event, Event, { Pid, Tag } }, State ) ->
-    Pid ! { get_event( State#state.port, Event ), Tag },
+    Pid ! { event, get_event( State#state.port, Event ), Tag },
     { noreply, State }.
 
 
@@ -299,7 +299,7 @@ stop_idempotent_test_() ->
 server_scenario_test_() ->
     { ok, Pid, From } = start_test_server( "echo.sh" ),
     ok = receive
-        { Res1, From } -> Res1
+        { start, Res1, From } -> Res1
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
@@ -307,14 +307,14 @@ server_scenario_test_() ->
 
     { ok, From2 } = request_event( Pid, "SomeEvent" ),
     ResEvent = receive
-        { Res2, From2 } -> Res2
+        { event, Res2, From2 } -> Res2
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
 
     { ok, From3 } = stop( Pid ),
     ResStop = receive
-        { Res3, From3 } -> Res3
+        { stop, Res3, From3 } -> Res3
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
