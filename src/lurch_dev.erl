@@ -25,10 +25,8 @@
 -define( DRIVER_DIR, code:lib_dir( lurch, drivers ) ).
 -ifndef( TEST ).
 -define( DRIVER_TIMEOUT, 5000 ).
--define( CALL_TIMEOUT, 5100 ).
 -else.
 -define( DRIVER_TIMEOUT, 100 ).
--define( CALL_TIMEOUT, 200 ).
 -endif. % TEST
 
 -type msg_tag() :: reference().
