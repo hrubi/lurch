@@ -5,10 +5,15 @@
 -module( lurch_proc ).
 
 -export(
-    [ via/1
+    [ reg/1
+    , via/1
     , id/1
     , where/1
     ] ).
+
+-spec reg( term() ) -> true.
+reg( Id ) ->
+    gproc:reg( Id ).
 
 -spec via( term() ) -> term().
 via( Id ) ->

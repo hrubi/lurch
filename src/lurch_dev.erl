@@ -71,7 +71,7 @@ request_event( Id, Event ) ->
     } ).
 
 init( { Id, Driver, Params, From } ) ->
-    true = gproc:reg( Id ),
+    true = lurch_proc:reg( Id ),
     ok = gen_server:cast( self(), { start_driver, Id, Driver, Params, From } ),
     { ok, #state{} }.
 
