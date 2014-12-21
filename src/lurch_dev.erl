@@ -335,7 +335,6 @@ test_server_scenario( _ ) ->
         ?DRIVER_TIMEOUT -> timeout
     end,
     ProcAlive2 = is_process_alive( Pid ),
-    ExpEventRes = { ok, [ ?EVENT, "SomeEvent" ] },
 
     [ { "server pid alive", ?_assert( ProcAlive ) }
     , { "receive event", ?_assertEqual(
