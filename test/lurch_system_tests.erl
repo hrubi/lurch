@@ -1,4 +1,4 @@
--module( lurch_system_test ).
+-module( lurch_system_tests ).
 
 -ifdef( TEST ).
 -include_lib( "eunit/include/eunit.hrl" ).
