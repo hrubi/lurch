@@ -10,12 +10,20 @@
 -export(
     [ start_link/0
     , start_devman/0
+    , start_dev_sup/0
     ] ).
 
 %% supervisor callbacks
 -export( [ init/1 ] ).
 
--define( CHILD( I, Type ), { I, { I, start_link, [] }, permanent, 5000, Type, [I] } ).
+-define( CHILD( I, Type, Args ),
+        { I
+        , { I, start_link, Args }
+        , permanent
+        , 5000
+        , Type
+        , [I]
+        } ).
 
 
 %% ===================================================================
@@ -26,6 +34,9 @@ start_link() ->
 
 start_devman() ->
     supervisor:start_child( ?MODULE, devman_spec() ).
+
+start_dev_sup() ->
+    supervisor:start_child( ?MODULE, dev_sup_spec() ).
 
 
 % supervisor callbacks
@@ -38,4 +49,7 @@ init( [] ) ->
 %% Internal functions
 %% ===================================================================
 devman_spec() ->
-    ?CHILD( lurch_devman, worker ).
+    ?CHILD( lurch_devman, worker, [] ).
+
+dev_sup_spec() ->
+    ?CHILD( lurch_dev_sup, supervisor, [ main ] ).

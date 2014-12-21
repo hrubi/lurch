@@ -9,7 +9,9 @@
 % API functions
 -export(
     [ start/3
+    , start/4
     , start_link/3
+    , start_link/4
     , stop/1
     , request_event/2
     ] ).
@@ -40,13 +42,21 @@
 %% ===================================================================
 
 -spec start( term(), binary(), [ binary() ] ) -> { ok, device_id() }.
-start( Name, Driver, Parameters ) ->
-    start_server( fun gen_server:start/3, Name, Driver, Parameters ).
+start( Id, Driver, Parameters ) ->
+    start( Id, Driver, Parameters, self() ).
+
+-spec start( term(), binary(), [ binary() ], pid() ) -> { ok, pid() }.
+start( Id, Driver, Parameters, Caller ) ->
+    start_server( fun gen_server:start/3, Id, Driver, Parameters, Caller ).
 
 
 -spec start_link( term(), binary(), [ binary() ] ) -> { ok, device_id() }.
-start_link( Name, Driver, Parameters ) ->
-    start_server( fun gen_server:start_link/3, Name, Driver, Parameters ).
+start_link( Id, Driver, Parameters ) ->
+    start_link( Id, Driver, Parameters, self() ).
+
+-spec start_link( term(), binary(), [ binary() ], pid() ) -> { ok, pid() }.
+start_link( Id, Driver, Parameters, Caller ) ->
+    start_server( fun gen_server:start_link/3, Id, Driver, Parameters, Caller ).
 
 
 -spec stop( term() ) -> ok.
@@ -212,11 +222,8 @@ format_cmd( Cmd, Data ) ->
     string:join( [ Cmd | Data ] ++ ["OK\n"], "\n" ).
 
 
-start_server( Fun, Name, Driver, Parameters ) ->
-    Id = lurch_proc:id( Name ),
-    { ok, _Pid } = Fun( ?MODULE, { Id, Driver, Parameters, self() }, [] ),
-    { ok, Id }.
-
+start_server( Fun, Id, Driver, Parameters, Caller ) ->
+    Fun( ?MODULE, { Id, Driver, Parameters, Caller }, [] ).
 
 %% ===================================================================
 %% Tests
@@ -304,8 +311,8 @@ server_scenario_test_() ->
     }.
 
 test_server_scenario( _ ) ->
-    Name = make_ref(),
-    { ok, Id } = start_test_server( Name, "echo.sh" ),
+    Id = make_ref(),
+    { ok, _Pid } = start_test_server( Id, "echo.sh" ),
     Pid = lurch_proc:where( Id ),
     ok = receive
         { start, Res1, Id } -> Res1
@@ -347,8 +354,8 @@ start_test_driver( Driver ) ->
     start_driver( test_driver_path( Driver ), [] ).
 
 
-start_test_server( Name, Driver ) ->
-    start( Name, test_driver_path( Driver ), [] ).
+start_test_server( Id, Driver ) ->
+    start( Id, test_driver_path( Driver ), [] ).
 
 
 mock_lurch_os() ->

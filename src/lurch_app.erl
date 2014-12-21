@@ -14,7 +14,7 @@
 
 start( _StartType, _StartArgs ) ->
     { ok, Sup } = lurch_sup:start_link(),
-    _DevMan = start_device_subsystem(),
+    ok = start_device_subsystem(),
     { ok, Sup }.
 
 
@@ -27,9 +27,10 @@ stop( _State ) ->
 %% ===================================================================
 
 start_device_subsystem() ->
-    { ok, Pid } = lurch_sup:start_devman(),
-    start_devices( Pid ),
-    Pid.
+    { ok, DevMan } = lurch_sup:start_devman(),
+    { ok, _ } = lurch_sup:start_dev_sup(),
+    start_devices( DevMan ),
+    ok.
 
 start_devices( DevMan ) ->
     Devices = lurch_conf:read_devices( "test/devices" ),

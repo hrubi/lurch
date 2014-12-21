@@ -7,17 +7,16 @@
 -export(
     [ reg/1
     , via/1
-    , id/1
     , where/1
     ] ).
 
 -spec reg( term() ) -> true.
 reg( Id ) ->
-    gproc:reg( Id ).
+    gproc:reg( id( Id ) ).
 
 -spec via( term() ) -> term().
 via( Id ) ->
-    { via, gproc, Id }.
+    { via, gproc, id( Id ) }.
 
 -spec id( term() ) -> term().
 id( Name ) ->
@@ -25,4 +24,4 @@ id( Name ) ->
 
 -spec where( term() ) -> pid() | undefined.
 where( Id ) ->
-    gproc:where( Id ).
+    gproc:where( id( Id ) ).

@@ -79,8 +79,8 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Driver = proplists:get_value(driver, Configuration),
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
-    Name = make_ref(),
-    { ok, DeviceId } = lurch_dev:start( Name, Driver, Parameters ),
+    DeviceId = make_ref(),
+    { ok, _SupPid } = lurch_dev_sup:start_dev( DeviceId, Driver, Parameters ),
     Device = #device{ id = DeviceId
                     , driver = Driver
                     , parameters = Parameters
@@ -259,10 +259,10 @@ device_stop_response_test_() ->
 setup_server() ->
     { ok, Pid } = start(),
     ok = setup_meck(),
-    meck:expect( lurch_dev, start,
+    meck:expect( lurch_dev_sup, start_dev,
                  fun( _Id, _Driver, _Parameters ) -> { ok, make_ref() } end ),
     meck:expect( lurch_dev, stop,
-                 fun( _Port ) -> ok end ),
+                 fun( _Id ) -> ok end ),
     Pid.
 
 
@@ -273,11 +273,13 @@ setup_server_stop( Pid ) ->
 
 setup_meck() ->
     meck:new( lurch_dev, [] ),
+    meck:new( lurch_dev_sup, [] ),
     ok.
 
 
 setup_meck_stop( ok ) ->
-    meck:unload( lurch_dev ).
+    meck:unload( lurch_dev ),
+    meck:unload( lurch_dev_sup ).
 
 
 
