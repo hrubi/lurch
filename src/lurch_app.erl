@@ -28,7 +28,6 @@ stop( _State ) ->
 
 start_device_subsystem() ->
     { ok, DevMan } = lurch_sup:start_devman(),
-    { ok, _ } = lurch_sup:start_dev_sup(),
     start_devices( DevMan ),
     ok.
 

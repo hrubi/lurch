@@ -10,7 +10,6 @@
 -export(
     [ start_link/0
     , start_devman/0
-    , start_dev_sup/0
     ] ).
 
 %% supervisor callbacks
@@ -33,10 +32,8 @@ start_link() ->
     supervisor:start_link( { local, ?MODULE }, ?MODULE, [] ).
 
 start_devman() ->
+    supervisor:start_child( ?MODULE, dev_sup_spec() ),
     supervisor:start_child( ?MODULE, devman_spec() ).
-
-start_dev_sup() ->
-    supervisor:start_child( ?MODULE, dev_sup_spec() ).
 
 
 % supervisor callbacks
