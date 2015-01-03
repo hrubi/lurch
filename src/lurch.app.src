@@ -8,5 +8,5 @@
         , gproc
         ] }
     , {mod, { lurch_app, [] } }
-    , {env, [] }
+    , {env, [ { autostart_devices, true } ] }
     ] }.

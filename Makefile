@@ -22,7 +22,7 @@ clean-deps:
 	rm deps/init
 
 test: compile
-	ERL_AFLAGS="-kernel error_logger silent" $(REBAR) eunit skip_deps=true
+	ERL_AFLAGS="-kernel error_logger silent -lurch autostart_devices false" $(REBAR) eunit skip_deps=true
 
 dialyze:
 	dialyzer -I include --src -r src
