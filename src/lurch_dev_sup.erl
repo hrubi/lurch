@@ -13,7 +13,8 @@
 -export(
     [ start_link/1
     , start_link/2
-    , start_dev/4
+    , start_dev/2
+    , stop_dev/2
     ] ).
 
 %% supervisor callbacks
@@ -28,10 +29,11 @@ start_link( main ) ->
 start_link( intermediate, Args ) ->
     supervisor:start_link( ?MODULE, { intermediate, Args } ).
 
-% FIXME - ugly, those parameters should not be exposed here
-start_dev( Sup, Id, Driver, Parameters ) ->
-    Caller = self(),
-    supervisor:start_child( Sup, [ [ Id, Driver, Parameters, Caller ] ] ).
+start_dev( Sup, Args ) ->
+    supervisor:start_child( Sup, [ Args ] ).
+
+stop_dev( Sup, Pid ) ->
+    supervisor:terminate_child( Sup, Pid ).
 
 % supervisor callbacks
 

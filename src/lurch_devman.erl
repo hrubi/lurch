@@ -61,6 +61,7 @@ poll_device_event( Device, Event ) ->
 %% ===================================================================
 -record( device,
     { id         :: term()
+    , sup_pid    :: pid()
     , driver     :: binary()
     , parameters :: [ binary() ]
     , events     :: [ binary() ]
@@ -84,10 +85,12 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
     DeviceId = make_ref(),
-    { ok, _SupPid } = lurch_dev_sup:start_dev(
-        State#state.dev_sup, DeviceId, Driver, Parameters
+    DeviceArgs = [ DeviceId, Driver, Parameters, self() ],
+    { ok, SupPid } = lurch_dev_sup:start_dev(
+        State#state.dev_sup, DeviceArgs
     ),
     Device = #device{ id = DeviceId
+                    , sup_pid = SupPid
                     , driver = Driver
                     , parameters = Parameters
                     , events = Events
@@ -98,8 +101,11 @@ handle_call( { start_device, Configuration }, _From, State ) ->
 
 handle_call( { stop_device, DeviceId }, _From, State ) ->
     case orddict:find( DeviceId, State#state.devices ) of
-        { ok, _Device } ->
-            { reply, ok = lurch_dev:stop( DeviceId ), State };
+        { ok, Device } ->
+            ok = lurch_dev_sup:stop_dev( State#state.dev_sup, Device#device.sup_pid ),
+            NewDevices = orddict:erase( DeviceId, State#state.devices ),
+            NewState = State#state{ devices = NewDevices },
+            { reply, ok, NewState };
         error -> {reply, { error, no_such_device }, State }
     end;
 
@@ -271,9 +277,9 @@ setup_server() ->
     { ok, Pid } = start( fun() -> lurch_dev_sup:start_link( main ) end ),
     ok = setup_meck(),
     meck:expect( lurch_dev_sup, start_dev,
-                 fun( _Sup, _Id, _Driver, _Parameters ) -> { ok, make_ref() } end ),
-    meck:expect( lurch_dev, stop,
-                 fun( _Id ) -> ok end ),
+                 fun( _Sup, _Args ) -> { ok, make_ref() } end ),
+    meck:expect( lurch_dev_sup, stop_dev,
+                 fun( _Sup, _Pid ) -> ok end ),
     Pid.
 
 
