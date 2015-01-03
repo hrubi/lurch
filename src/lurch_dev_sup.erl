@@ -11,8 +11,7 @@
 
 %% API
 -export(
-    [ start/1
-    , start_link/1
+    [ start_link/1
     , start_link/2
     , start_dev/3
     ] ).
@@ -23,9 +22,6 @@
 %% ===================================================================
 %% API
 %% ===================================================================
-start( main ) ->
-    supervisor:start( { local, ?MODULE }, ?MODULE, main ).
-
 start_link( main ) ->
     supervisor:start_link( { local, ?MODULE }, ?MODULE, main ).
 
