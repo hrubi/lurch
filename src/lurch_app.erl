@@ -27,23 +27,23 @@ stop( _State ) ->
 %% ===================================================================
 
 start_device_subsystem() ->
-    { ok, DevMan } = lurch_sup:start_devman(),
-    start_devices( DevMan ),
+    { ok, _Pid } = lurch_sup:start_devman(),
+    start_devices(),
     ok.
 
-start_devices( DevMan ) ->
+start_devices() ->
     { ok, App } = application:get_application(),
     Autostart = application:get_env( App, autostart_devices, true ),
-    start_devices( DevMan, Autostart ).
+    start_devices( Autostart ).
 
-start_devices( DevMan, true ) ->
+start_devices( true ) ->
     Devices = lurch_conf:read_devices( "test/devices" ),
     lists:foreach(
         fun( Device ) ->
-            lurch_devman:start_device( DevMan, Device )
+            lurch_devman:start_device( Device )
         end,
         Devices
      );
 
-start_devices( _, _ ) ->
+start_devices( _ ) ->
     ok.

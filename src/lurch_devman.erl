@@ -10,9 +10,9 @@
 
 % API functions
 -export(
-    [ start/0, start_link/0, stop/1
-    , start_device/2, stop_device/2, list_devices/1
-    , poll_device_event/3
+    [ start/0, start_link/0, stop/0
+    , start_device/1, stop_device/1, list_devices/0
+    , poll_device_event/2
     ] ).
 
 % gen_server callbacks
@@ -21,38 +21,40 @@
     , handle_info/2, terminate/2, code_change/3
     ] ).
 
+-define( SERVER_NAME, ?MODULE ).
+
 %% ===================================================================
 %% API functions
 %% ===================================================================
 -spec start() -> ignore | { error, term()} | { ok, pid() }.
 start() ->
-    gen_server:start( ?MODULE, [], [] ).
+    gen_server:start( { local, ?SERVER_NAME }, ?MODULE, [], [] ).
 
 -spec start_link() -> ignore | { error, term()} | { ok, pid() }.
 start_link() ->
-    gen_server:start_link( ?MODULE, [], [] ).
+    gen_server:start_link( { local, ?SERVER_NAME }, ?MODULE, [], [] ).
 
--spec stop( pid() ) -> ok.
-stop( Server ) ->
-    gen_server:call( Server, stop ).
+-spec stop() -> ok.
+stop() ->
+    gen_server:call( ?SERVER_NAME, stop ).
 
 -type device_id() :: term().
 
--spec start_device( pid(), list() ) -> { ok, device_id() }.
-start_device( Server, Configuration ) ->
-    gen_server:call( Server, { start_device, Configuration } ).
+-spec start_device( list() ) -> { ok, device_id() }.
+start_device( Configuration ) ->
+    gen_server:call( ?SERVER_NAME, { start_device, Configuration } ).
 
--spec stop_device( pid(), device_id() ) -> ok | { error | no_such_device }.
-stop_device( Server, Device ) ->
-    gen_server:call( Server, { stop_device, Device } ).
+-spec stop_device( device_id() ) -> ok | { error | no_such_device }.
+stop_device( Device ) ->
+    gen_server:call( ?SERVER_NAME, { stop_device, Device } ).
 
--spec list_devices( pid() ) ->  { ok, [ [ proplists:property() ] ] }.
-list_devices( Server ) ->
-    gen_server:call( Server, list_devices ).
+-spec list_devices() ->  { ok, [ [ proplists:property() ] ] }.
+list_devices() ->
+    gen_server:call( ?SERVER_NAME, list_devices ).
 
--spec poll_device_event( pid() , device_id(), binary() ) -> ok.
-poll_device_event( Server, Device, Event ) ->
-    gen_server:cast( Server, { poll_device_event, Device, Event } ).
+-spec poll_device_event( device_id(), binary() ) -> ok.
+poll_device_event( Device, Event ) ->
+    gen_server:cast( ?SERVER_NAME, { poll_device_event, Device, Event } ).
 
 %% ===================================================================
 %% gen_server callbacks
@@ -266,9 +268,9 @@ setup_server() ->
     Pid.
 
 
-setup_server_stop( Pid ) ->
+setup_server_stop( _ ) ->
     setup_meck_stop( ok ),
-    stop( Pid ).
+    stop().
 
 
 setup_meck() ->
@@ -288,25 +290,25 @@ test_is_alive( Pid ) ->
     [ { "server alive" , ?_assert( erlang:is_process_alive( Pid ) ) } ].
 
 
-test_start_stop_device( Pid ) ->
+test_start_stop_device( _ ) ->
     DeviceCount = 2,
-    StartResults = [ start_device( Pid, dummy_driver_config() ) ||
+    StartResults = [ start_device( dummy_driver_config() ) ||
                     _N <- lists:seq( 1, DeviceCount ) ],
-    StopResults = [ stop_device( Pid, element( 2, StartResult ) ) ||
+    StopResults = [ stop_device( element( 2, StartResult ) ) ||
                     StartResult <- StartResults ],
     [ [ { "start device", ?_assertEqual( ok, Res ) } || { Res, _ } <- StartResults ]
     , [ { "stop device", ?_assertMatch( ok, Res ) } || Res <- StopResults ]
     ].
 
 
-test_add_list_devices( Pid ) ->
+test_add_list_devices( _ ) ->
     DeviceCount = 2,
     StartDeviceOk = fun() ->
-        { ok, DeviceId } = start_device( Pid, dummy_driver_config() ),
+        { ok, DeviceId } = start_device( dummy_driver_config() ),
         DeviceId
     end,
     DeviceIds = [ StartDeviceOk() || _N <- lists:seq( 1, DeviceCount ) ],
-    { ok, Result } = list_devices( Pid ),
+    { ok, Result } = list_devices(),
     GetDeviceFields = fun( Field, Devices ) ->
         [ proplists:get_value( Field, Device ) || Device <- Devices ]
     end,
