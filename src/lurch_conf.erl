@@ -8,7 +8,7 @@
 
 -export(
     [ read_devices/1
-	] ).
+    ] ).
 
 % API functions
 
@@ -29,8 +29,8 @@ conf_file( Name ) ->
     end.
 
 from_file( Name ) ->
-	{ ok, Content } = file:read_file( Name ),
-	jiffy:decode( Content ).
+    { ok, Content } = file:read_file( Name ),
+    jiffy:decode( Content ).
 
 parse_devices( Devices ) ->
     { [ { <<"devices">>, DeviceList } ] } = Devices,
