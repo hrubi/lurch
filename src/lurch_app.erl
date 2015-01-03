@@ -32,9 +32,7 @@ start_device_subsystem() ->
     ok.
 
 start_devices() ->
-    { ok, App } = application:get_application(),
-    Autostart = application:get_env( App, autostart_devices, true ),
-    start_devices( Autostart ).
+    start_devices( get_app_env( autostart_devices ) ).
 
 start_devices( true ) ->
     Devices = lurch_conf:read_devices( "test/devices" ),
@@ -47,3 +45,10 @@ start_devices( true ) ->
 
 start_devices( _ ) ->
     ok.
+
+get_app_env( Key ) ->
+    get_app_env( Key, undefined ).
+
+get_app_env( Key, Def ) ->
+    { ok, App } = application:get_application(),
+    application:get_env( App, Key, Def ).
