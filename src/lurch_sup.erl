@@ -7,46 +7,40 @@
 -behaviour( supervisor ).
 
 %% API
--export(
-    [ start_link/0
-    , start_devman/0
-    ] ).
+-export( [ start_link/0 ] ).
 
 %% supervisor callbacks
 -export( [ init/1 ] ).
 
--define( CHILD( I, Type, Args ),
-        { I
-        , { I, start_link, Args }
-        , permanent
-        , 5000
-        , Type
-        , [I]
-        } ).
-
 
 %% ===================================================================
-%% supervisor callbacks
+%% API
 %% ===================================================================
 start_link() ->
     supervisor:start_link( { local, ?MODULE }, ?MODULE, [] ).
 
-start_devman() ->
-    supervisor:start_child( ?MODULE, dev_sup_spec() ),
-    supervisor:start_child( ?MODULE, devman_spec() ).
-
-
-% supervisor callbacks
-
+%% ===================================================================
+%% supervisor callbacks
+%% ===================================================================
 init( [] ) ->
-    { ok, { { one_for_one, 5, 10 }, [] }  }.
+    Flags = { one_for_one, 5, 10 },
+    Workers = [ worker_spec( lurch_devman, [ start_dev_sup_fun() ], [ gen_server ] ) ],
+    { ok, { Flags, Workers } }.
 
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
-devman_spec() ->
-    ?CHILD( lurch_devman, worker, [] ).
 
-dev_sup_spec() ->
-    ?CHILD( lurch_dev_sup, supervisor, [ main ] ).
+worker_spec( Name, Args, Modules ) ->
+    { Name, { Name, start_link, Args }
+    , permanent, timer:seconds( 5 ), worker, [ Name ] ++ Modules }.
+
+supervisor_spec( Name, Args ) ->
+    { Name, { Name, start_link, Args }
+    , permanent, infinity, supervisor, [ Name, supervisor ] }.
+
+start_dev_sup_fun() ->
+    Sup = self(),
+    WorkerSpec = supervisor_spec( lurch_dev_sup, [ main ] ),
+    fun() -> supervisor:start_child( Sup, WorkerSpec ) end.

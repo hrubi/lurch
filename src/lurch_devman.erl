@@ -10,7 +10,7 @@
 
 % API functions
 -export(
-    [ start/0, start_link/0, stop/0
+    [ start/1, start_link/1, stop/0
     , start_device/1, stop_device/1, list_devices/0
     , poll_device_event/2
     ] ).
@@ -26,13 +26,13 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--spec start() -> ignore | { error, term()} | { ok, pid() }.
-start() ->
-    gen_server:start( { local, ?SERVER_NAME }, ?MODULE, [], [] ).
+-spec start( fun() ) -> ignore | { error, term()} | { ok, pid() }.
+start( StartSupFun ) ->
+    gen_server:start( { local, ?SERVER_NAME }, ?MODULE, StartSupFun, [] ).
 
--spec start_link() -> ignore | { error, term()} | { ok, pid() }.
-start_link() ->
-    gen_server:start_link( { local, ?SERVER_NAME }, ?MODULE, [], [] ).
+-spec start_link( fun() ) -> ignore | { error, term()} | { ok, pid() }.
+start_link( StartSupFun ) ->
+    gen_server:start_link( { local, ?SERVER_NAME }, ?MODULE, StartSupFun, [] ).
 
 -spec stop() -> ok.
 stop() ->
@@ -68,12 +68,14 @@ poll_device_event( Device, Event ) ->
     } ).
 
 -record( state,
-    { devices = orddict:new() :: orddict:orddict()
+    { dev_sup
+    , devices = orddict:new() :: orddict:orddict()
     , asyncs = orddict:new() :: orddict:orddict()
     } ).
 
 
-init( _Args ) ->
+init( StartSupFun ) ->
+    self() ! { start_dev_sup, StartSupFun },
     { ok, #state{} }.
 
 
@@ -82,7 +84,9 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
     DeviceId = make_ref(),
-    { ok, _SupPid } = lurch_dev_sup:start_dev( DeviceId, Driver, Parameters ),
+    { ok, _SupPid } = lurch_dev_sup:start_dev(
+        State#state.dev_sup, DeviceId, Driver, Parameters
+    ),
     Device = #device{ id = DeviceId
                     , driver = Driver
                     , parameters = Parameters
@@ -124,6 +128,10 @@ handle_cast( { poll_device_event, Device, Event }, State ) ->
 
 handle_cast( _Request, State ) ->
     { noreply, State }.
+
+handle_info( { start_dev_sup, StartSupFun }, State ) ->
+    { ok, SupPid } = StartSupFun(),
+    { noreply, State#state{ dev_sup = SupPid } };
 
 handle_info( { event, Msg, Tag }, State ) ->
     handle_async( Tag, Msg, fun handle_poll/3, State );
@@ -260,10 +268,10 @@ device_stop_response_test_() ->
 
 % setup functions
 setup_server() ->
-    { ok, Pid } = start(),
+    { ok, Pid } = start( fun() -> lurch_dev_sup:start_link( main ) end ),
     ok = setup_meck(),
     meck:expect( lurch_dev_sup, start_dev,
-                 fun( _Id, _Driver, _Parameters ) -> { ok, make_ref() } end ),
+                 fun( _Sup, _Id, _Driver, _Parameters ) -> { ok, make_ref() } end ),
     meck:expect( lurch_dev, stop,
                  fun( _Id ) -> ok end ),
     Pid.
