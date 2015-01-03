@@ -223,8 +223,9 @@ handle_device_transition( Id, Msg, Fun, State ) ->
          { setup, fun setup_meck/0, fun setup_meck_stop/1, fun F/1 } ).
 
 -define( DRIVER_NAME, <<"dummy">> ).
-
 -define( EVENT_NAME, <<"event_one">> ).
+-define( EVENTS, [ ?EVENT_NAME ] ).
+-define( PARAMETERS, [] ).
 
 % Test descriptions
 server_test_() ->
@@ -315,7 +316,12 @@ test_add_list_devices( _ ) ->
     [ { "device count", ?_assertEqual( DeviceCount, length( Result ) ) }
     , [ { "device id", ?_assert( lists:member( DeviceId, DeviceIds ) ) }
         || DeviceId <- GetDeviceFields( id, Result ) ]
-    , [ { "driver name", ?_assertEqual( ?DRIVER_NAME, Driver ) } || Driver <- GetDeviceFields( driver, Result ) ]
+    , [ { "driver name", ?_assertEqual( ?DRIVER_NAME, Driver ) }
+        || Driver <- GetDeviceFields( driver, Result ) ]
+    , [ { "parameters", ?_assertEqual( ?PARAMETERS, Driver ) }
+        || Driver <- GetDeviceFields( parameters, Result ) ]
+    , [ { "events", ?_assertEqual( ?EVENTS, Driver ) }
+        || Driver <- GetDeviceFields( events, Result ) ]
     ].
 
 
@@ -381,8 +387,8 @@ test_stop_response( ok ) ->
 % Helper functions
 dummy_driver_config() ->
     [ { driver, ?DRIVER_NAME }
-    , { parameters, [] }
-    , { events, [ ?EVENT_NAME ] }
+    , { parameters, ?PARAMETERS }
+    , { events, ?EVENTS }
     ].
 
 -endif. % TEST
