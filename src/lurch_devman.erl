@@ -66,7 +66,7 @@ poll_device_event( Device, Event ) ->
     , driver     :: binary()
     , parameters :: [ binary() ]
     , events     :: [ binary() ]
-    , state      :: starting | running | stopping
+    , state      :: starting | running | stopping | crashed
     } ).
 
 -record( state,
@@ -104,7 +104,11 @@ handle_call( { stop_device, DeviceId }, _From, State ) ->
     case orddict:find( DeviceId, State#state.devices ) of
         { ok, Device } ->
             ok = lurch_dev_sup:stop_dev( State#state.dev_sup, Device#device.sup_pid ),
-            NewDevices = orddict:erase( DeviceId, State#state.devices ),
+            NewDevices = orddict:update(
+                DeviceId,
+                fun( D ) -> D#device{ state = stopping } end,
+                State#state.devices
+            ),
             NewState = State#state{ devices = NewDevices },
             { reply, ok, NewState };
         error -> {reply, { error, no_such_device }, State }
@@ -200,12 +204,24 @@ handle_start( Msg, DeviceId, State ) ->
             State#state{ devices = Devices };
         { error, _Reason } ->
             % FIXME - log
-            Devices = orddict:erase( DeviceId, State#state.devices ),
+            Devices = orddict:update(
+                DeviceId,
+                fun( D ) -> D#device{ state = crashed } end,
+                State#state.devices
+            ),
             State#state{ devices = Devices }
     end.
 
-handle_stop( ok, DeviceId, State ) ->
+handle_stop( shutdown, DeviceId, State ) ->
     Devices = orddict:erase( DeviceId, State#state.devices ),
+    State#state{ devices = Devices };
+
+handle_stop( { exit, _Code }, DeviceId, State ) ->
+    Devices = orddict:update(
+        DeviceId,
+        fun( D ) -> D#device{ os_pid = undefined, state = crashed } end,
+        State#state.devices
+    ),
     State#state{ devices = Devices }.
 
 handle_poll( _Msg, _DeviceId, State ) ->
@@ -228,7 +244,7 @@ handle_device_transition( Id, Msg, Fun, State ) ->
         { ok, _Device } ->
             { noreply, Fun( Msg, Id, State ) };
         error ->
-            { noreply, State }
+            { stop, { unknown_device, Id }, State }
     end.
 
 
@@ -377,7 +393,9 @@ test_start_response( ok ) ->
     StartOk = { ok, [ { os_pid, 1234 } ] },
     { noreply, S1 } = handle_info( { start, StartOk, Id }, S0 ),
     { noreply, S2 } = handle_info( { start, { error, reason }, Id }, S0 ),
-    { noreply, S3 } = handle_info( { start, StartOk, make_ref() }, S0 ),
+
+    Id2 = make_ref(),
+    ResNonEx = handle_info( { start, StartOk, Id2 }, S0 ),
 
     [ { "device id",
         ?_assertEqual( Id, (orddict:fetch( Id, S1#state.devices ) )#device.id ) }
@@ -385,25 +403,38 @@ test_start_response( ok ) ->
             running,
             (orddict:fetch( Id, S1#state.devices ))#device.state ) }
     , { "start result error",
-        ?_assertEqual( error, orddict:find( Id, S2#state.devices ) ) }
+        ?_assertMatch(
+            #device{ id = Id, state = crashed },
+            orddict:fetch( Id, S2#state.devices ) ) }
     , { "nonexisting id",
-        ?_assertEqual( S0, S3 ) }
+        ?_assertMatch( { stop, { unknown_device, Id2 }, S0 }, ResNonEx ) }
     ].
 
 
 test_stop_response( ok ) ->
     Id = make_ref(),
+    Id2 = make_ref(),
     Device = #device{ id = Id, state = running },
     Devices = orddict:store( Id, Device, orddict:new() ),
     S0 = #state{ devices = Devices },
 
-    { noreply, S1 } = handle_info( { stop, ok, Id }, S0 ),
-    { noreply, S2 } = handle_info( { stop, ok, make_ref() }, S0 ),
+    { noreply, S1 } = handle_info( { stop, shutdown, Id }, S0 ),
+    ResNonEx = handle_info( { stop, shutdown, Id2 }, S0 ),
+
+    { noreply, S2 } = handle_info( { stop, { exit, 1 }, Id }, S0 ),
+    ResNonEx2 = handle_info( { stop, { exit, 1 }, Id2 }, S0 ),
 
     [ { "stop result ok",
         ?_assertEqual( error, orddict:find( Id, S1#state.devices ) ) }
     , { "nonexisting id",
-        ?_assertEqual( S0, S2 ) }
+        ?_assertMatch( { stop, { unknown_device, Id2 }, S0 }, ResNonEx ) }
+
+    , { "stop result crash",
+        ?_assertMatch(
+            #device{ id = Id, state = crashed },
+            orddict:fetch( Id, S2#state.devices ) ) }
+    , { "nonexisting id",
+        ?_assertMatch( { stop, { unknown_device, Id2 }, S0 }, ResNonEx ) }
     ].
 
 

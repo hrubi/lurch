@@ -46,8 +46,8 @@ start( Id, Driver, Parameters ) ->
     start( Id, Driver, Parameters, self() ).
 
 -spec start( term(), binary(), [ binary() ], pid() ) -> { ok, pid() }.
-start( Id, Driver, Parameters, Caller ) ->
-    start_server( fun gen_server:start/3, Id, Driver, Parameters, Caller ).
+start( Id, Driver, Parameters, Owner ) ->
+    start_server( fun gen_server:start/3, Id, Driver, Parameters, Owner ).
 
 
 -spec start_link( term(), binary(), [ binary() ] ) -> { ok, device_id() }.
@@ -55,19 +55,19 @@ start_link( Id, Driver, Parameters ) ->
     start_link( Id, Driver, Parameters, self() ).
 
 -spec start_link( term(), binary(), [ binary() ], pid() ) -> { ok, pid() }.
-start_link( Id, Driver, Parameters, Caller ) ->
-    start_server( fun gen_server:start_link/3, Id, Driver, Parameters, Caller ).
+start_link( Id, Driver, Parameters, Owner ) ->
+    start_server( fun gen_server:start_link/3, Id, Driver, Parameters, Owner ).
 
 
 -spec stop( term() ) -> ok.
 stop( Id ) ->
-    gen_server:cast( lurch_proc:via( Id ), { stop, self() } ).
+    gen_server:cast( lurch_proc:via( Id ), stop ).
 
 
 -spec request_event( term(), string() ) -> { ok, msg_tag() }.
 request_event( Id, Event ) ->
-    { _, Tag } = From = from(),
-    ok = gen_server:cast( lurch_proc:via( Id ), { get_event, Event, From } ),
+    Tag = make_ref(),
+    ok = gen_server:cast( lurch_proc:via( Id ), { get_event, Event, Tag } ),
     { ok, Tag }.
 
 
@@ -76,52 +76,47 @@ request_event( Id, Event ) ->
 %% ===================================================================
 
 -record( state,
-    { port :: port() | undefined
-    , id :: term()
+    { id :: term()
+    , owner :: pid()
+    , port :: port() | undefined
     } ).
 
-init( { Id, Driver, Params, From } ) ->
+init( { Id, Driver, Params, Owner } ) ->
+    process_flag( trap_exit, true ),
     true = lurch_proc:reg( Id ),
-    self() ! { start_driver, Id, Driver, Params, From },
-    { ok, #state{} }.
+    self() ! { start_driver, Driver, Params },
+    { ok, #state{ id = Id, owner = Owner} }.
 
 
-handle_call( stop, _From, State ) ->
-    ok = stop_driver( State#state.port ),
-    { stop, normal, ok, #state{} };
+handle_call( _Msg, _From, State ) ->
+    { stop, { error, unsupported_call }, State }.
 
-handle_call( { get_event, Event }, _From, State ) ->
-    { reply, get_event( State#state.port, Event ), State }.
+handle_cast( { get_event, Event, Tag }, State ) ->
+    State#state.owner ! { event, get_event( State#state.port, Event ), Tag },
+    { noreply, State };
 
-
-handle_cast( { stop, From }, State ) ->
-    ok = stop_driver( State#state.port ),
-    From ! { stop, ok, State#state.id },
-    { stop, normal, #state{} };
-
-handle_cast( { get_event, Event, { Pid, Tag } }, State ) ->
-    Pid ! { event, get_event( State#state.port, Event ), Tag },
-    { noreply, State }.
+handle_cast( stop, State ) ->
+    { stop, shutdown, State }.
 
 
-handle_info( { start_driver, Id, Driver, Params, From }, #state{} = State0 ) ->
-    State1 = State0#state{ id = Id },
+handle_info( { start_driver, Driver, Params }, State ) ->
     case start_driver( Driver, Params ) of
         { ok, Port } ->
             Info = [ erlang:port_info( Port, os_pid ) ],
-            From ! { start, { ok, Info }, State1#state.id },
-            { noreply, State1#state{ port = Port } };
+            State#state.owner ! { start, { ok, Info }, State#state.id },
+            { noreply, State#state{ port = Port } };
         Error ->
-            From ! { start, Error, Id },
-            { stop, Error , State1 }
-    end.
+            State#state.owner ! { start, Error, State#state.id },
+            { stop, Error , State }
+    end;
+
+handle_info( { Port, { exit_status, ExitCode } }, State )
+    when Port =:= State#state.port ->
+    { stop, { exit, ExitCode }, State }.
 
 
-terminate( normal, _State ) ->
-    ok;
-
-terminate( _Reason, State ) ->
-    stop_driver( State#state.port ).
+terminate( Reason, State ) ->
+    handle_stop( Reason, State ).
 
 
 code_change( _OldVsn, State, _Extra ) ->
@@ -132,22 +127,22 @@ code_change( _OldVsn, State, _Extra ) ->
 %% Internal functions
 %% ===================================================================
 
--spec from() -> { pid(), reference() }.
-from() ->
-    { self(), make_ref() }.
-
-
 -spec start_driver( string() | binary(), [ string() | binary() ] ) ->
     { ok, port() } | { error, term() }.
 start_driver( Driver, Parameters ) ->
     try Port = open_port( { spawn_executable, driver_path( Driver ) },
                           [ { args, Parameters }
                           , { line, 8 }
+                          , exit_status
                           , use_stdio ] ),
         { ok, Port }
     catch
         error:Error -> { error, Error }
     end.
+
+handle_stop( Reason, State ) ->
+    ok = stop_driver( State#state.port ),
+    State#state.owner ! { stop, Reason, State#state.id }.
 
 -spec stop_driver( port() ) -> ok.
 stop_driver( Port ) ->
@@ -220,8 +215,8 @@ format_cmd( Cmd, Data ) ->
     string:join( [ Cmd | Data ] ++ ["OK\n"], "\n" ).
 
 
-start_server( Fun, Id, Driver, Parameters, Caller ) ->
-    Fun( ?MODULE, { Id, Driver, Parameters, Caller }, [] ).
+start_server( Fun, Id, Driver, Parameters, Owner ) ->
+    Fun( ?MODULE, { Id, Driver, Parameters, Owner }, [] ).
 
 %% ===================================================================
 %% Tests
@@ -338,7 +333,7 @@ test_server_scenario( _ ) ->
     , { "receive event", ?_assertEqual(
                             { ok, [ ?EVENT, "SomeEvent" ] },
                             ResEvent ) }
-    , { "server stopped", ?_assertEqual( ok , ResStop ) }
+    , { "server stopped", ?_assertEqual( shutdown , ResStop ) }
     , { "server pid not alive", ?_assertNot( ProcAlive2 ) }
     ].
 

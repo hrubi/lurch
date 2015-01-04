@@ -3,20 +3,21 @@
 -ifdef( TEST ).
 -include_lib( "eunit/include/eunit.hrl" ).
 
-start_stop_test_() ->
+devman_test_() ->
     { foreach
     , fun start_devman/0
     , fun stop_devman/1
     ,
     [ fun test_started/1
     , fun test_single/1
+    , fun test_crash/1
     ] }.
 
 test_started( _ ) ->
     [ ?_assert( undefined =/= whereis( lurch_devman ) ) ].
 
 test_single( _ ) ->
-    { ok, Id } = lurch_devman:start_device( driver_config() ),
+    { ok, Id } = lurch_devman:start_device( driver_config_single() ),
     { ok, DevList1 } = lurch_devman:list_devices(),
     [ DevProps ] = lists:filter(
         fun( Props ) ->
@@ -30,6 +31,13 @@ test_single( _ ) ->
     , ?_assertEqual( 0, length( DevList2 ) )
     ].
 
+test_crash( _ ) ->
+    { ok, Id } = lurch_devman:start_device( driver_config_crash() ),
+    timer:sleep(500),
+    { ok, [ DevProps ] } = lurch_devman:list_devices(),
+    St = proplists:get_value( state, DevProps ),
+    [ ?_assertEqual( crashed, St ) ].
+
 start_devman() ->
     ok = application:start( gproc ),
     ok = application:start( lurch ).
@@ -39,10 +47,17 @@ stop_devman( _ ) ->
     ok = application:stop( lurch ).
 
 % Helper functions
-driver_config() ->
+driver_config_single() ->
     [ { driver, "test/single.sh" }
     , { parameters, [] }
     , { events, [ <<"blah">> ] }
+    ].
+
+
+driver_config_crash() ->
+    [ { driver, "test/crash.sh" }
+    , { parameters, [] }
+    , { events, [ ] }
     ].
 
 -endif. % TEST
