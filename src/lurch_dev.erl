@@ -82,7 +82,7 @@ request_event( Id, Event ) ->
 
 init( { Id, Driver, Params, From } ) ->
     true = lurch_proc:reg( Id ),
-    ok = gen_server:cast( self(), { start_driver, Id, Driver, Params, From } ),
+    self() ! { start_driver, Id, Driver, Params, From },
     { ok, #state{} }.
 
 
@@ -94,17 +94,6 @@ handle_call( { get_event, Event }, _From, State ) ->
     { reply, get_event( State#state.port, Event ), State }.
 
 
-handle_cast( { start_driver, Id, Driver, Params, From }, #state{} = State0 ) ->
-    State1 = State0#state{ id = Id },
-    case start_driver( Driver, Params ) of
-        { ok, Port } ->
-            From ! { start, ok, State1#state.id },
-            { noreply, State1#state{ port = Port } };
-        Error ->
-            From ! { start, Error, Id },
-            { stop, Error , State1 }
-    end;
-
 handle_cast( { stop, From }, State ) ->
     ok = stop_driver( State#state.port ),
     From ! { stop, ok, State#state.id },
@@ -115,8 +104,16 @@ handle_cast( { get_event, Event, { Pid, Tag } }, State ) ->
     { noreply, State }.
 
 
-handle_info( _Info, State ) ->
-    { noreply, State }.
+handle_info( { start_driver, Id, Driver, Params, From }, #state{} = State0 ) ->
+    State1 = State0#state{ id = Id },
+    case start_driver( Driver, Params ) of
+        { ok, Port } ->
+            From ! { start, ok, State1#state.id },
+            { noreply, State1#state{ port = Port } };
+        Error ->
+            From ! { start, Error, Id },
+            { stop, Error , State1 }
+    end.
 
 
 terminate( normal, _State ) ->
