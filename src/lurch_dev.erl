@@ -108,7 +108,8 @@ handle_info( { start_driver, Id, Driver, Params, From }, #state{} = State0 ) ->
     State1 = State0#state{ id = Id },
     case start_driver( Driver, Params ) of
         { ok, Port } ->
-            From ! { start, ok, State1#state.id },
+            Info = [ erlang:port_info( Port, os_pid ) ],
+            From ! { start, { ok, Info }, State1#state.id },
             { noreply, State1#state{ port = Port } };
         Error ->
             From ! { start, Error, Id },
@@ -311,7 +312,7 @@ test_server_scenario( _ ) ->
     Id = make_ref(),
     { ok, _Pid } = start_test_server( Id, "echo.sh" ),
     Pid = lurch_proc:where( Id ),
-    ok = receive
+    { ok, _Info } = receive
         { start, Res1, Id } -> Res1
     after
         ?DRIVER_TIMEOUT -> timeout

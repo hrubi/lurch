@@ -61,6 +61,7 @@ poll_device_event( Device, Event ) ->
 %% ===================================================================
 -record( device,
     { id         :: term()
+    , os_pid     :: non_neg_integer()
     , sup_pid    :: pid()
     , driver     :: binary()
     , parameters :: [ binary() ]
@@ -178,14 +179,22 @@ device_to_proplist( Device ) ->
     , { driver, Device#device.driver }
     , { parameters, Device#device.parameters }
     , { events, Device#device.events }
+    , { state, Device#device.state }
+    , { os_pid, Device#device.os_pid }
     ].
 
 handle_start( Msg, DeviceId, State ) ->
     case Msg of
-        ok ->
+        { ok, Info } ->
+            UpdateDeviceFun = fun( D ) ->
+                D#device{
+                  state = running,
+                  os_pid = proplists:get_value( os_pid, Info )
+                }
+            end,
             Devices = orddict:update(
                 DeviceId,
-                fun( D ) -> D#device{ state = running } end,
+                UpdateDeviceFun,
                 State#state.devices
             ),
             State#state{ devices = Devices };
@@ -365,9 +374,10 @@ test_start_response( ok ) ->
     Devices = orddict:store( Id, Device, orddict:new() ),
     S0 = #state{ devices = Devices },
 
-    { noreply, S1 } = handle_info( { start, ok, Id }, S0 ),
+    StartOk = { ok, [ { os_pid, 1234 } ] },
+    { noreply, S1 } = handle_info( { start, StartOk, Id }, S0 ),
     { noreply, S2 } = handle_info( { start, { error, reason }, Id }, S0 ),
-    { noreply, S3 } = handle_info( { start, ok, make_ref() }, S0 ),
+    { noreply, S3 } = handle_info( { start, StartOk, make_ref() }, S0 ),
 
     [ { "device id",
         ?_assertEqual( Id, (orddict:fetch( Id, S1#state.devices ) )#device.id ) }
