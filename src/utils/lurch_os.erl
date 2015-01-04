@@ -19,7 +19,7 @@ cmd( Command ) ->
 
 -spec kill_os_process( integer(), integer() ) -> ok | { error, { integer(), string() } }.
 kill_os_process( Signal, Pid ) ->
-    { Ret, Out } = cmd( io_lib:format( "kill -s ~p ~p", [ Signal, Pid ] ) ),
+    { Ret, Out } = cmd( io_lib:format( "kill -s ~b ~b", [ Signal, Pid ] ) ),
     case Ret of
         0 -> ok;
         Ret -> { error, { Ret, Out } }
