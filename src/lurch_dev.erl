@@ -92,7 +92,8 @@ handle_call( _Msg, _From, State ) ->
     { stop, { error, unsupported_call }, State }.
 
 handle_cast( { get_event, Event, Tag }, State ) ->
-    State#state.owner ! { event, get_event( State#state.port, Event ), Tag },
+    { ok, EventRes } = get_event( State#state.port, Event ),
+    send_owner( State, event, EventRes, Tag ),
     { noreply, State };
 
 handle_cast( stop, State ) ->
@@ -103,10 +104,10 @@ handle_info( { start_driver, Driver, Params }, State ) ->
     case start_driver( Driver, Params ) of
         { ok, Port } ->
             Info = [ erlang:port_info( Port, os_pid ) ],
-            State#state.owner ! { start, { ok, Info }, State#state.id },
+            send_owner( State, start, { ok, Info } ),
             { noreply, State#state{ port = Port } };
         Error ->
-            State#state.owner ! { start, Error, State#state.id },
+            send_owner( State, start, Error ),
             { stop, Error , State }
     end;
 
@@ -127,6 +128,12 @@ code_change( _OldVsn, State, _Extra ) ->
 %% Internal functions
 %% ===================================================================
 
+send_owner( State, Event, Msg ) ->
+    send_owner( State, Event, Msg, State#state.id ).
+
+send_owner( State, Event, Msg, Id ) ->
+    State#state.owner ! { Event, Msg, Id }.
+
 -spec start_driver( string() | binary(), [ string() | binary() ] ) ->
     { ok, port() } | { error, term() }.
 start_driver( Driver, Parameters ) ->
@@ -142,7 +149,7 @@ start_driver( Driver, Parameters ) ->
 
 handle_stop( Reason, State ) ->
     ok = stop_driver( State#state.port ),
-    State#state.owner ! { stop, Reason, State#state.id }.
+    send_owner( State, stop, Reason ).
 
 -spec stop_driver( port() ) -> ok.
 stop_driver( Port ) ->
@@ -331,7 +338,7 @@ test_server_scenario( _ ) ->
 
     [ { "server pid alive", ?_assert( ProcAlive ) }
     , { "receive event", ?_assertEqual(
-                            { ok, [ ?EVENT, "SomeEvent" ] },
+                            [ ?EVENT, "SomeEvent" ],
                             ResEvent ) }
     , { "server stopped", ?_assertEqual( shutdown , ResStop ) }
     , { "server pid not alive", ?_assertNot( ProcAlive2 ) }
