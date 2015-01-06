@@ -216,7 +216,7 @@ handle_stop( shutdown, DeviceId, State ) ->
     Devices = orddict:erase( DeviceId, State#state.devices ),
     State#state{ devices = Devices };
 
-handle_stop( { exit, _Code }, DeviceId, State ) ->
+handle_stop( _Error, DeviceId, State ) ->
     Devices = orddict:update(
         DeviceId,
         fun( D ) -> D#device{ os_pid = undefined, state = crashed } end,
