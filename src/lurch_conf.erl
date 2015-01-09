@@ -75,6 +75,15 @@ read_devices_test_() ->
     , ?_assertEqual( [], proplists:get_value( parameters, D ) )
     ].
 
+
+conf_file_test_() ->
+    { setup
+    , fun lurch_mock:lurch_os_safe_relative_path/0
+    , fun lurch_mock:module_stop/1
+    , [ ?_assert( is_list( conf_file( safe ) ) )
+    , ?_assertThrow( { unsafe_relative_path, unsafe }, conf_file( unsafe ) )
+    ] }.
+
 key_to_atom_test_() ->
     L = [ { <<"bin">>, 1 }, 1, { 1, 2 }, { 1, 2, 3 } ],
     Exp = [ { bin, 1 }, 1, { 1, 2 }, { 1, 2, 3 } ],
