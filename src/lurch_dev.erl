@@ -236,8 +236,8 @@ start_server( Fun, Id, Driver, Parameters, Owner ) ->
 path_test_() ->
     { "driver path",
         { setup,
-            fun mock_lurch_os/0,
-            fun mock_lurch_os_stop/1,
+            fun lurch_mock:lurch_os_safe_relative_path/0,
+            fun lurch_mock:module_stop/1,
             [ ?_assert( is_list( driver_path( safe ) ) )
             , ?_assertThrow( { unsafe_relative_path, unsafe }, driver_path( unsafe ) )
             ] } }.
@@ -354,21 +354,6 @@ start_test_driver( Driver ) ->
 
 start_test_server( Id, Driver ) ->
     start( Id, test_driver_path( Driver ), [] ).
-
-
-mock_lurch_os() ->
-    meck:new( lurch_os, [] ),
-    meck:expect( lurch_os, safe_relative_path,
-                fun( Path ) ->
-                    case Path of
-                        safe -> "safe";
-                        unsafe -> undefined
-                    end
-                end ).
-
-
-mock_lurch_os_stop( _ ) ->
-    meck:unload( lurch_os ).
 
 
 -endif. % TEST
