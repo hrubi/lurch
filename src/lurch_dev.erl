@@ -24,7 +24,6 @@
 
 -include( "lurch_dev_proto.hrl" ).
 
--define( DRIVER_DIR, code:lib_dir( lurch, drivers ) ).
 -ifndef( TEST ).
 -define( DRIVER_TIMEOUT, 5000 ).
 -else.
@@ -213,7 +212,7 @@ remaining_timeout( Timeout, Start ) ->
 driver_path( Driver ) ->
     case lurch_os:safe_relative_path( Driver ) of
         undefined -> throw( unsafe_relative_path );
-        Path -> filename:join( [ ?DRIVER_DIR, Path ] )
+        Path -> filename:join( [ lurch_util:priv_dir( drivers ) , Path ] )
     end.
 
 

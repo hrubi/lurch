@@ -4,8 +4,6 @@
 
 -module( lurch_conf ).
 
--define( CONF_DIR, code:lib_dir( lurch, conf ) ).
-
 -export(
     [ read_devices/1
     ] ).
@@ -25,7 +23,7 @@ conf_file( Name ) ->
     case lurch_os:safe_relative_path( Name ) of
         undefined -> throw( { unsafe_relative_path, Name } );
         Path ->
-            filename:join( [ ?CONF_DIR, Path ] ) ++ ".json"
+            filename:join( [ lurch_util:priv_dir( conf ), Path ] ) ++ ".json"
     end.
 
 from_file( Name ) ->
