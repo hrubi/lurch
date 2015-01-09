@@ -211,7 +211,7 @@ remaining_timeout( Timeout, Start ) ->
 -spec driver_path( string() ) -> string().
 driver_path( Driver ) ->
     case lurch_os:safe_relative_path( Driver ) of
-        undefined -> throw( unsafe_relative_path );
+        undefined -> throw( { unsafe_relative_path, Driver } );
         Path -> filename:join( [ lurch_util:priv_dir( drivers ) , Path ] )
     end.
 
@@ -239,7 +239,7 @@ path_test_() ->
             fun mock_lurch_os/0,
             fun mock_lurch_os_stop/1,
             [ ?_assert( is_list( driver_path( safe ) ) )
-            , ?_assertThrow( unsafe_relative_path, driver_path( unsafe ) )
+            , ?_assertThrow( { unsafe_relative_path, unsafe }, driver_path( unsafe ) )
             ] } }.
 
 
