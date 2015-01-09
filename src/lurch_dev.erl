@@ -9,8 +9,6 @@
 % API functions
 -export(
     [ start/3
-    , start/4
-    , start_link/3
     , start_link/4
     , stop/1
     , request_event/2
@@ -41,17 +39,9 @@
 %% ===================================================================
 
 -spec start( term(), binary(), [ binary() ] ) -> { ok, device_id() }.
+% @doc This is meant only for tests, use start_link in application.
 start( Id, Driver, Parameters ) ->
-    start( Id, Driver, Parameters, self() ).
-
--spec start( term(), binary(), [ binary() ], pid() ) -> { ok, pid() }.
-start( Id, Driver, Parameters, Owner ) ->
-    start_server( fun gen_server:start/3, Id, Driver, Parameters, Owner ).
-
-
--spec start_link( term(), binary(), [ binary() ] ) -> { ok, device_id() }.
-start_link( Id, Driver, Parameters ) ->
-    start_link( Id, Driver, Parameters, self() ).
+    start_server( fun gen_server:start/3, Id, Driver, Parameters, self() ).
 
 -spec start_link( term(), binary(), [ binary() ], pid() ) -> { ok, pid() }.
 start_link( Id, Driver, Parameters, Owner ) ->
