@@ -9,6 +9,7 @@
     [ cmd/1
     , is_os_process_alive/1
     , kill_os_process/2
+    , kill_os_process_group/2
     , safe_relative_path/1
     ] ).
 
@@ -19,7 +20,14 @@ cmd( Command ) ->
 
 -spec kill_os_process( integer(), integer() ) -> ok | { error, { integer(), string() } }.
 kill_os_process( Signal, Pid ) ->
-    { Ret, Out } = cmd( io_lib:format( "kill -s ~b ~b", [ Signal, Pid ] ) ),
+    kill_os_pid_or_pgid( Signal, io_lib:format( "~b", [ Pid ] ) ).
+
+-spec kill_os_process_group( integer(), integer() ) -> ok | { error, { integer(), string() } }.
+kill_os_process_group( Signal, Pgid ) ->
+    kill_os_pid_or_pgid( Signal, io_lib:format( "-~b", [ Pgid ] ) ).
+
+kill_os_pid_or_pgid( Signal, Entity ) ->
+    { Ret, Out } = cmd( io_lib:format( "kill -s ~b ~s", [ Signal, Entity ] ) ),
     case Ret of
         0 -> ok;
         Ret -> { error, { Ret, Out } }
