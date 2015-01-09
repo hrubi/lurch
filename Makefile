@@ -8,6 +8,11 @@ all: compile
 compile: deps/init rebar.config
 	$(REBAR) compile
 
+rel: compile generate
+
+generate:
+	$(REBAR) generate
+
 deps: deps/init
 
 deps/init:
