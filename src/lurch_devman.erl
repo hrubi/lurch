@@ -272,76 +272,33 @@ handle_device_transition( Id, Msg, Fun, State ) ->
 -ifdef( TEST ).
 -include_lib( "eunit/include/eunit.hrl" ).
 
--define( setup_server( F ),
-         { setup, fun setup_server/0, fun setup_server_stop/1, fun F/1 } ).
-
--define( setup_meck( F ),
-         { setup, fun setup_meck/0, fun setup_meck_stop/1, fun F/1 } ).
-
 -define( DRIVER_NAME, <<"dummy">> ).
 -define( EVENT_NAME, <<"event_one">> ).
 -define( EVENTS, [ ?EVENT_NAME ] ).
 -define( PARAMETERS, [] ).
 
+
+
 % Test descriptions
-
-device_start_stop_test_() ->
-    { "start and stop device"
-    , ?setup_server( test_start_stop_device ) }.
-
-
-device_list_test_() ->
-    { "add and list devices"
-    , ?setup_server( test_add_list_devices ) }.
-
-
-device_poll_event_test_() ->
-    { "poll events"
-    , ?setup_meck( test_poll_device_event ) }.
+server_test_() ->
+    { foreach
+    , fun setup_server/0
+    , fun setup_server_stop/1
+    , [ fun test_start_stop_device/1
+      , fun test_add_list_devices/1
+      ]
+    }.
 
 
-device_start_response_test_() ->
-    { "start response"
-    , ?setup_meck( test_start_response ) }.
-
-
-device_stop_response_test_() ->
-    { "stop response"
-    , ?setup_meck( test_stop_response ) }.
-
-
-% setup functions
-setup_server() ->
-    { ok, _ } = start( fun() -> { ok, make_ref() } end ),
-    ok = setup_meck(),
-    meck:expect( lurch_device, start,
-        fun( _, _, _, _ ) ->
-            Id = make_ref(),
-            whereis( lurch_devman ) !
-            { start, { ok, [ { os_pid, 123 } ] }, Id },
-            { ok, Id }
-        end
-    ),
-    meck:expect( lurch_device, stop,
-        fun( Id ) ->
-            whereis( lurch_devman ) !
-                { stop, shutdown, Id },
-            ok
-        end
-   ).
-
-setup_server_stop( _ ) ->
-    setup_meck_stop( ok ),
-    stop().
-
-
-setup_meck() ->
-    meck:new( lurch_device, [] ),
-    ok.
-
-
-setup_meck_stop( ok ) ->
-    meck:unload( lurch_device ).
+functional_test_() ->
+    { foreach
+    , fun setup_meck/0
+    , fun setup_meck_stop/1
+    , [ fun test_poll_device_event/1
+      , fun test_start_response/1
+      , fun test_stop_response/1
+      ]
+    }.
 
 
 
@@ -453,6 +410,41 @@ test_stop_response( ok ) ->
     , { "nonexisting id",
         ?_assertMatch( { stop, { unknown_device, Id2 }, S0 }, ResNonEx2 ) }
     ].
+
+
+
+% setup functions
+setup_server() ->
+    { ok, _ } = start( fun() -> { ok, make_ref() } end ),
+    ok = setup_meck(),
+    meck:expect( lurch_device, start,
+        fun( _, _, _, _ ) ->
+            Id = make_ref(),
+            whereis( lurch_devman ) !
+            { start, { ok, [ { os_pid, 123 } ] }, Id },
+            { ok, Id }
+        end
+    ),
+    meck:expect( lurch_device, stop,
+        fun( Id ) ->
+            whereis( lurch_devman ) !
+                { stop, shutdown, Id },
+            ok
+        end
+   ).
+
+setup_server_stop( _ ) ->
+    setup_meck_stop( ok ),
+    stop().
+
+
+setup_meck() ->
+    meck:new( lurch_device, [] ),
+    ok.
+
+
+setup_meck_stop( ok ) ->
+    meck:unload( lurch_device ).
 
 
 
