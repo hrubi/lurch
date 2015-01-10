@@ -29,6 +29,7 @@ test_single( _ ) ->
     { ok, DevList2 } = lurch_devman:list_devices(),
     [ ?_assertEqual( 1, length( DevList1 ) )
     , ?_assertEqual( "test/echo.sh", proplists:get_value( driver, DevProps ) )
+    , ?_assertEqual( running, proplists:get_value( state, DevProps ) )
     , ?_assertEqual( 0, length( DevList2 ) )
     ].
 
