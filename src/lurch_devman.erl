@@ -66,6 +66,8 @@ poll_device_event( Device, Event ) ->
     , parameters :: [ binary() ]
     , events     :: [ binary() ]
     , state      :: starting | running | stopping | crashed
+    , started_by :: term()
+    , stopped_by :: term()
     } ).
 
 -record( state,
@@ -80,7 +82,7 @@ init( StartSupFun ) ->
     { ok, #state{} }.
 
 
-handle_call( { start_device, Configuration }, _From, State ) ->
+handle_call( { start_device, Configuration }, From, State ) ->
     Driver = proplists:get_value(driver, Configuration),
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
@@ -91,11 +93,11 @@ handle_call( { start_device, Configuration }, _From, State ) ->
                     , driver = Driver
                     , parameters = Parameters
                     , events = Events
-                    , state = starting },
+                    , state = starting
+                    , started_by = From },
     Devices = orddict:store( DeviceId, Device, State#state.devices ),
     NewState = State#state{ devices = Devices },
-    % FIXME - reply when the device really starts
-    { reply, { ok, DeviceId }, NewState };
+    { noreply, NewState };
 
 handle_call( { stop_device, DeviceId }, _From, State ) ->
     case orddict:find( DeviceId, State#state.devices ) of
@@ -185,30 +187,33 @@ device_to_proplist( Device ) ->
     , { os_pid, Device#device.os_pid }
     ].
 
-handle_start( Msg, DeviceId, State ) ->
-    case Msg of
-        { ok, Info } ->
-            UpdateDeviceFun = fun( D ) ->
-                D#device{
-                  state = running,
-                  os_pid = proplists:get_value( os_pid, Info )
-                }
-            end,
-            Devices = orddict:update(
-                DeviceId,
-                UpdateDeviceFun,
-                State#state.devices
-            ),
-            State#state{ devices = Devices };
-        { error, _Reason } ->
-            % FIXME - log
-            Devices = orddict:update(
-                DeviceId,
-                fun( D ) -> D#device{ state = crashed } end,
-                State#state.devices
-            ),
-            State#state{ devices = Devices }
-    end.
+handle_start( { ok, Info }, DeviceId, State ) ->
+    Device = orddict:fetch( DeviceId, State#state.devices ),
+    gen_server:reply( Device#device.started_by, { ok, DeviceId } ),
+
+    UpdateDeviceFun = fun( D ) ->
+        D#device{
+          state = running,
+          os_pid = proplists:get_value( os_pid, Info )
+        }
+    end,
+    Devices = orddict:update(
+        DeviceId,
+        UpdateDeviceFun,
+        State#state.devices
+    ),
+    State#state{ devices = Devices };
+
+handle_start( { error, _ } = Error, DeviceId, State ) ->
+    % FIXME - log
+    Device = orddict:fetch( DeviceId, State#state.devices ),
+    gen_server:reply( Device#device.started_by, Error ),
+    Devices = orddict:update(
+        DeviceId,
+        fun( D ) -> D#device{ state = crashed } end,
+        State#state.devices
+    ),
+    State#state{ devices = Devices }.
 
 handle_stop( shutdown, DeviceId, State ) ->
     Devices = orddict:erase( DeviceId, State#state.devices ),
@@ -296,7 +301,12 @@ setup_server() ->
     { ok, _ } = start( fun() -> { ok, make_ref() } end ),
     ok = setup_meck(),
     meck:expect( lurch_device, start,
-        fun( _, _, _, _ ) -> { ok, make_ref() } end
+        fun( _, _, _, _ ) ->
+            Id = make_ref(),
+            whereis( lurch_devman ) !
+            { start, { ok, [ { os_pid, 123 } ] }, Id },
+            { ok, Id }
+        end
     ),
     meck:expect( lurch_device, stop, 1, ok ).
 
@@ -372,7 +382,7 @@ test_poll_device_event( ok ) ->
 
 test_start_response( ok ) ->
     Id = make_ref(),
-    Device = #device{ id = Id },
+    Device = #device{ id = Id, started_by = { make_ref(), self() } },
     Devices = orddict:store( Id, Device, orddict:new() ),
     S0 = #state{ devices = Devices },
 
