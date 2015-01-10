@@ -188,9 +188,7 @@ device_to_proplist( Device ) ->
     ].
 
 handle_start( { ok, Info }, DeviceId, State ) ->
-    Device = orddict:fetch( DeviceId, State#state.devices ),
-    gen_server:reply( Device#device.started_by, { ok, DeviceId } ),
-
+    reply_start( DeviceId, State, { ok, DeviceId } ),
     UpdateDeviceFun = fun( D ) ->
         D#device{
           state = running,
@@ -206,14 +204,17 @@ handle_start( { ok, Info }, DeviceId, State ) ->
 
 handle_start( { error, _ } = Error, DeviceId, State ) ->
     % FIXME - log
-    Device = orddict:fetch( DeviceId, State#state.devices ),
-    gen_server:reply( Device#device.started_by, Error ),
+    reply_start( DeviceId, State, Error ),
     Devices = orddict:update(
         DeviceId,
         fun( D ) -> D#device{ state = crashed } end,
         State#state.devices
     ),
     State#state{ devices = Devices }.
+
+reply_start( DeviceId, State, Msg ) ->
+    Device = orddict:fetch( DeviceId, State#state.devices ),
+    gen_server:reply( Device#device.started_by, Msg ).
 
 handle_stop( shutdown, DeviceId, State ) ->
     Devices = orddict:erase( DeviceId, State#state.devices ),
