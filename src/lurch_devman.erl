@@ -76,8 +76,6 @@ poll_device_event( Device, Event ) ->
 
 
 init( StartSupFun ) ->
-    % FIXME - does this have to be done in the 2nd init phase?
-    %       - let's try to put it here
     self() ! { start_dev_sup, StartSupFun },
     { ok, #state{} }.
 
