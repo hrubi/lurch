@@ -297,36 +297,13 @@ server_scenario_test_() ->
 
 test_server_scenario( _ ) ->
     Id = make_ref(),
-    { ok, Pid } = start_test_server( Id, "echo.sh" ),
-    Pid = lurch_proc:where( Id ),
-    MonRef = erlang:monitor( process, Pid ),
-    { ok, _ } = receive
-        { start, Res1, Id } -> Res1
-    after
-        ?DRIVER_TIMEOUT -> timeout
-    end,
+    { Pid, MonRef, ResStart } = start_test_server( Id, "echo.sh" ),
     ProcAlive = is_process_alive( Pid ),
+    ResEvent = request_event_test_server( Id, "SomeEvent" ),
+    { ResStop, ResExit } = stop_test_server( Id, Pid, MonRef ),
 
-    { ok, From2 } = request_event( Id, "SomeEvent" ),
-    ResEvent = receive
-        { event, Res2, From2 } -> Res2
-    after
-        ?DRIVER_TIMEOUT -> timeout
-    end,
-
-    ok = stop( Id ),
-    ResStop = receive
-        { stop, Res3, Id } -> Res3
-    after
-        ?DRIVER_TIMEOUT -> timeout
-    end,
-    ResExit = receive
-        { 'DOWN', MonRef, process, Pid, _ } -> ok
-    after
-        ?DRIVER_TIMEOUT -> timeout
-    end,
-
-    [ { "server pid alive", ?_assert( ProcAlive ) }
+    [ { "server started", ?_assertMatch( { ok, _ }, ResStart ) }
+    , { "server pid alive", ?_assert( ProcAlive ) }
     , { "receive event", ?_assertEqual(
                             [ ?EVENT, "SomeEvent" ],
                             ResEvent ) }
@@ -344,7 +321,41 @@ start_test_driver( Driver ) ->
 
 
 start_test_server( Id, Driver ) ->
-    start( Id, test_driver_path( Driver ), [] ).
+    { ok, Pid } = start( Id, test_driver_path( Driver ), [] ),
+    MonRef = erlang:monitor( process, Pid ),
+    StartRes = receive
+        { start, Res, Id } -> Res
+    after
+        ?DRIVER_TIMEOUT -> timeout
+    end,
+    { Pid, MonRef, StartRes }.
 
+
+stop_test_server( Id, Pid, MonRef ) ->
+    ok = stop( Id ),
+    StopRes = receive
+        { stop, Res, Id } -> Res
+    after
+        ?DRIVER_TIMEOUT -> timeout
+    end,
+    ExitRes = exit_test_server( Pid, MonRef ),
+    { StopRes, ExitRes }.
+
+
+exit_test_server( Pid, MonRef ) ->
+    ExitRes = receive
+        { 'DOWN', MonRef, process, Pid, _ } -> ok
+    after
+        ?DRIVER_TIMEOUT -> timeout
+    end,
+    ExitRes.
+
+request_event_test_server( Id, Event ) ->
+    { ok, T } = request_event( Id, Event ),
+    receive
+        { event, E, T } -> E
+    after
+        ?DRIVER_TIMEOUT -> timeout
+    end.
 
 -endif. % TEST
