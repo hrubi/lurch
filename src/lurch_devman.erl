@@ -99,18 +99,19 @@ handle_call( { start_device, Configuration }, From, State ) ->
     NewState = State#state{ devices = Devices },
     { noreply, NewState };
 
-handle_call( { stop_device, DeviceId }, _From, State ) ->
+% FIXME - the state of the device should be checked
+% eg. can't be possible to stop it when it's already stopping
+handle_call( { stop_device, DeviceId }, From, State ) ->
     case orddict:find( DeviceId, State#state.devices ) of
         { ok, Device } ->
             ok = lurch_device:stop( Device#device.id ),
             NewDevices = orddict:update(
                 DeviceId,
-                fun( D ) -> D#device{ state = stopping } end,
+                fun( D ) -> D#device{ state = stopping, stopped_by = From } end,
                 State#state.devices
             ),
             NewState = State#state{ devices = NewDevices },
-            % FIXME - reply when the device really stops
-            { reply, ok, NewState };
+            { noreply, NewState };
         error -> {reply, { error, no_such_device }, State }
     end;
 
@@ -217,16 +218,28 @@ reply_start( DeviceId, State, Msg ) ->
     gen_server:reply( Device#device.started_by, Msg ).
 
 handle_stop( shutdown, DeviceId, State ) ->
+    reply_stop( DeviceId, State ),
     Devices = orddict:erase( DeviceId, State#state.devices ),
     State#state{ devices = Devices };
 
 handle_stop( _Error, DeviceId, State ) ->
+    reply_stop( DeviceId, State ),
     Devices = orddict:update(
         DeviceId,
         fun( D ) -> D#device{ os_pid = undefined, state = crashed } end,
         State#state.devices
     ),
     State#state{ devices = Devices }.
+
+reply_stop( DeviceId, State ) ->
+    Device = orddict:fetch( DeviceId, State#state.devices ),
+    reply_stop( Device#device.stopped_by ).
+
+% This can happen when there was device stop requested,
+% however the device has exited meanwhile.
+reply_stop( undefined ) -> ok;
+reply_stop( From ) -> gen_server:reply( From, ok ).
+
 
 handle_poll( _Msg, _DeviceId, State ) ->
     % FIXME - propagate to subscribers
@@ -309,7 +322,13 @@ setup_server() ->
             { ok, Id }
         end
     ),
-    meck:expect( lurch_device, stop, 1, ok ).
+    meck:expect( lurch_device, stop,
+        fun( Id ) ->
+            whereis( lurch_devman ) !
+                { stop, shutdown, Id },
+            ok
+        end
+   ).
 
 setup_server_stop( _ ) ->
     setup_meck_stop( ok ),
@@ -411,7 +430,8 @@ test_start_response( ok ) ->
 test_stop_response( ok ) ->
     Id = make_ref(),
     Id2 = make_ref(),
-    Device = #device{ id = Id, state = running },
+    Device = #device{ id = Id, state = running,
+                      stopped_by = { make_ref(), self() } },
     Devices = orddict:store( Id, Device, orddict:new() ),
     S0 = #state{ devices = Devices },
 
