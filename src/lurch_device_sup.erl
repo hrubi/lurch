@@ -5,7 +5,7 @@
 % intermediate level is temporary so in case the intermediate supervisor dies
 % due to it's child dying too often, the upper supervisor does not crash too.
 
--module( lurch_dev_sup ).
+-module( lurch_device_sup ).
 
 -behaviour( supervisor ).
 
@@ -41,7 +41,7 @@ init( main ) ->
     { ok, { { simple_one_for_one, 5, 10 }, [ intermediate_spec() ] } };
 
 init( { intermediate, Args } ) ->
-    { ok, { { one_for_one, 5, 10 }, [ lurch_dev_spec( Args ) ] }  }.
+    { ok, { { one_for_one, 5, 10 }, [ lurch_device_spec( Args ) ] }  }.
 
 % internal
 intermediate_spec() ->
@@ -53,11 +53,11 @@ intermediate_spec() ->
     , [ ?MODULE ]
     }.
 
-lurch_dev_spec( Args ) ->
+lurch_device_spec( Args ) ->
     { any
-    , { lurch_dev, start_link, Args }
+    , { lurch_device, start_link, Args }
     , transient
     , 5000
     , worker
-    , [ lurch_dev  ]
+    , [ lurch_device  ]
     }.

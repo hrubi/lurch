@@ -2,7 +2,7 @@
 %
 % @doc Provides communication mechanism to/from external driver
 
--module( lurch_dev ).
+-module( lurch_device ).
 
 -behaviour( gen_server ).
 
@@ -20,7 +20,7 @@
     , handle_info/2, terminate/2, code_change/3
     ] ).
 
--include( "lurch_dev_proto.hrl" ).
+-include( "lurch_device_proto.hrl" ).
 
 -ifndef( TEST ).
 -define( DRIVER_TIMEOUT, 5000 ).

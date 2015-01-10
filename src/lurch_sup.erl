@@ -42,5 +42,5 @@ supervisor_spec( Name, Args ) ->
 
 start_dev_sup_fun() ->
     Sup = self(),
-    WorkerSpec = supervisor_spec( lurch_dev_sup, [ main ] ),
+    WorkerSpec = supervisor_spec( lurch_device_sup, [ main ] ),
     fun() -> supervisor:start_child( Sup, WorkerSpec ) end.

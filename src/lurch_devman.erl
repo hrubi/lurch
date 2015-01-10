@@ -87,7 +87,7 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Events = proplists:get_value(events, Configuration, []),
     DeviceId = make_ref(),
     DeviceArgs = [ DeviceId, Driver, Parameters, self() ],
-    { ok, SupPid } = lurch_dev_sup:start_dev(
+    { ok, SupPid } = lurch_device_sup:start_dev(
         State#state.dev_sup, DeviceArgs
     ),
     Device = #device{ id = DeviceId
@@ -103,7 +103,7 @@ handle_call( { start_device, Configuration }, _From, State ) ->
 handle_call( { stop_device, DeviceId }, _From, State ) ->
     case orddict:find( DeviceId, State#state.devices ) of
         { ok, Device } ->
-            ok = lurch_dev_sup:stop_dev( State#state.dev_sup, Device#device.sup_pid ),
+            ok = lurch_device_sup:stop_dev( State#state.dev_sup, Device#device.sup_pid ),
             NewDevices = orddict:update(
                 DeviceId,
                 fun( D ) -> D#device{ state = stopping } end,
@@ -129,7 +129,7 @@ handle_call( stop, _From, State ) ->
 handle_cast( { poll_device_event, Device, Event }, State ) ->
     case device_event_exists( Device, Event, State#state.devices ) of
         ok ->
-            { ok, Tag } = lurch_dev:request_event( Device, Event ),
+            { ok, Tag } = lurch_device:request_event( Device, Event ),
             Asyncs = orddict:store( Tag, Device, State#state.asyncs ),
             { noreply, State#state{ asyncs = Asyncs } };
         _ ->
@@ -299,11 +299,11 @@ device_stop_response_test_() ->
 
 % setup functions
 setup_server() ->
-    { ok, Pid } = start( fun() -> lurch_dev_sup:start_link( main ) end ),
+    { ok, Pid } = start( fun() -> lurch_device_sup:start_link( main ) end ),
     ok = setup_meck(),
-    meck:expect( lurch_dev_sup, start_dev,
+    meck:expect( lurch_device_sup, start_dev,
                  fun( _Sup, _Args ) -> { ok, make_ref() } end ),
-    meck:expect( lurch_dev_sup, stop_dev,
+    meck:expect( lurch_device_sup, stop_dev,
                  fun( _Sup, _Pid ) -> ok end ),
     Pid.
 
@@ -314,14 +314,14 @@ setup_server_stop( _ ) ->
 
 
 setup_meck() ->
-    meck:new( lurch_dev, [] ),
-    meck:new( lurch_dev_sup, [] ),
+    meck:new( lurch_device, [] ),
+    meck:new( lurch_device_sup, [] ),
     ok.
 
 
 setup_meck_stop( ok ) ->
-    meck:unload( lurch_dev ),
-    meck:unload( lurch_dev_sup ).
+    meck:unload( lurch_device ),
+    meck:unload( lurch_device_sup ).
 
 
 
@@ -366,7 +366,7 @@ test_add_list_devices( _ ) ->
 
 test_poll_device_event( ok ) ->
     Tag = make_ref(),
-    meck:expect( lurch_dev, request_event,
+    meck:expect( lurch_device, request_event,
                  fun( _, _ ) -> { ok, Tag } end ),
     DeviceId = make_ref(),
     Event = myevent,
