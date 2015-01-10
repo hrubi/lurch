@@ -434,7 +434,7 @@ test_stop_response( ok ) ->
             #device{ id = Id, state = crashed },
             orddict:fetch( Id, S2#state.devices ) ) }
     , { "nonexisting id",
-        ?_assertMatch( { stop, { unknown_device, Id2 }, S0 }, ResNonEx ) }
+        ?_assertMatch( { stop, { unknown_device, Id2 }, S0 }, ResNonEx2 ) }
     ].
 
 
