@@ -297,9 +297,10 @@ server_scenario_test_() ->
 
 test_server_scenario( _ ) ->
     Id = make_ref(),
-    { ok, _Pid } = start_test_server( Id, "echo.sh" ),
+    { ok, Pid } = start_test_server( Id, "echo.sh" ),
     Pid = lurch_proc:where( Id ),
-    { ok, _Info } = receive
+    MonRef = erlang:monitor( process, Pid ),
+    { ok, _ } = receive
         { start, Res1, Id } -> Res1
     after
         ?DRIVER_TIMEOUT -> timeout
@@ -319,15 +320,18 @@ test_server_scenario( _ ) ->
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
-    timer:sleep( 100 ),
-    ProcAlive2 = is_process_alive( Pid ),
+    ResExit = receive
+        { 'DOWN', MonRef, process, Pid, _ } -> ok
+    after
+        ?DRIVER_TIMEOUT -> timeout
+    end,
 
     [ { "server pid alive", ?_assert( ProcAlive ) }
     , { "receive event", ?_assertEqual(
                             [ ?EVENT, "SomeEvent" ],
                             ResEvent ) }
     , { "server stopped", ?_assertEqual( shutdown , ResStop ) }
-    , { "server pid not alive", ?_assertNot( ProcAlive2 ) }
+    , { "server pid not alive", ?_assertEqual( ok, ResExit ) }
     ].
 
 % Helper functions
