@@ -62,7 +62,6 @@ poll_device_event( Device, Event ) ->
 -record( device,
     { id         :: term()
     , os_pid     :: non_neg_integer()
-    , sup_pid    :: pid()
     , driver     :: binary()
     , parameters :: [ binary() ]
     , events     :: [ binary() ]
@@ -77,6 +76,8 @@ poll_device_event( Device, Event ) ->
 
 
 init( StartSupFun ) ->
+    % FIXME - does this have to be done in the 2nd init phase?
+    %       - let's try to put it here
     self() ! { start_dev_sup, StartSupFun },
     { ok, #state{} }.
 
@@ -85,31 +86,30 @@ handle_call( { start_device, Configuration }, _From, State ) ->
     Driver = proplists:get_value(driver, Configuration),
     Parameters = proplists:get_value(parameters, Configuration),
     Events = proplists:get_value(events, Configuration, []),
-    DeviceId = make_ref(),
-    DeviceArgs = [ DeviceId, Driver, Parameters, self() ],
-    { ok, SupPid } = lurch_device_sup:start_dev(
-        State#state.dev_sup, DeviceArgs
+    { ok, DeviceId } = lurch_device:start(
+        State#state.dev_sup, Driver, Parameters, self()
     ),
     Device = #device{ id = DeviceId
-                    , sup_pid = SupPid
                     , driver = Driver
                     , parameters = Parameters
                     , events = Events
                     , state = starting },
     Devices = orddict:store( DeviceId, Device, State#state.devices ),
     NewState = State#state{ devices = Devices },
+    % FIXME - reply when the device really starts
     { reply, { ok, DeviceId }, NewState };
 
 handle_call( { stop_device, DeviceId }, _From, State ) ->
     case orddict:find( DeviceId, State#state.devices ) of
         { ok, Device } ->
-            ok = lurch_device_sup:stop_dev( State#state.dev_sup, Device#device.sup_pid ),
+            ok = lurch_device:stop( Device#device.id ),
             NewDevices = orddict:update(
                 DeviceId,
                 fun( D ) -> D#device{ state = stopping } end,
                 State#state.devices
             ),
             NewState = State#state{ devices = NewDevices },
+            % FIXME - reply when the device really stops
             { reply, ok, NewState };
         error -> {reply, { error, no_such_device }, State }
     end;
@@ -267,10 +267,6 @@ handle_device_transition( Id, Msg, Fun, State ) ->
 -define( PARAMETERS, [] ).
 
 % Test descriptions
-server_test_() ->
-    { "start and stop server"
-    , ?setup_server( test_is_alive ) }.
-
 
 device_start_stop_test_() ->
     { "start and stop device"
@@ -299,14 +295,12 @@ device_stop_response_test_() ->
 
 % setup functions
 setup_server() ->
-    { ok, Pid } = start( fun() -> lurch_device_sup:start_link( main ) end ),
+    { ok, _ } = start( fun() -> { ok, make_ref() } end ),
     ok = setup_meck(),
-    meck:expect( lurch_device_sup, start_dev,
-                 fun( _Sup, _Args ) -> { ok, make_ref() } end ),
-    meck:expect( lurch_device_sup, stop_dev,
-                 fun( _Sup, _Pid ) -> ok end ),
-    Pid.
-
+    meck:expect( lurch_device, start,
+        fun( _, _, _, _ ) -> { ok, make_ref() } end
+    ),
+    meck:expect( lurch_device, stop, 1, ok ).
 
 setup_server_stop( _ ) ->
     setup_meck_stop( ok ),
@@ -315,21 +309,15 @@ setup_server_stop( _ ) ->
 
 setup_meck() ->
     meck:new( lurch_device, [] ),
-    meck:new( lurch_device_sup, [] ),
     ok.
 
 
 setup_meck_stop( ok ) ->
-    meck:unload( lurch_device ),
-    meck:unload( lurch_device_sup ).
+    meck:unload( lurch_device ).
 
 
 
 % Actual tests
-test_is_alive( Pid ) ->
-    [ { "server alive" , ?_assert( erlang:is_process_alive( Pid ) ) } ].
-
-
 test_start_stop_device( _ ) ->
     DeviceCount = 2,
     StartResults = [ start_device( dummy_driver_config() ) ||

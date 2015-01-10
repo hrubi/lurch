@@ -1,4 +1,4 @@
--module( lurch_device_tests ).
+-module( lurch_device_subsystem_tests ).
 
 -ifdef( TEST ).
 -include_lib( "eunit/include/eunit.hrl" ).
@@ -25,15 +25,17 @@ test_single( _ ) ->
         end,
         DevList1 ),
     ok = lurch_devman:stop_device( Id ),
+    timer:sleep( 100 ),
     { ok, DevList2 } = lurch_devman:list_devices(),
     [ ?_assertEqual( 1, length( DevList1 ) )
-    , ?_assertEqual( "test/single.sh", proplists:get_value( driver, DevProps ) )
+    , ?_assertEqual( "test/echo.sh", proplists:get_value( driver, DevProps ) )
     , ?_assertEqual( 0, length( DevList2 ) )
     ].
 
 test_crash( _ ) ->
-    { ok, Id } = lurch_devman:start_device( driver_config_crash() ),
-    timer:sleep(500),
+    { ok, _Id } = lurch_devman:start_device( driver_config_crash() ),
+    % FIXME - the device start should be synchronous for the calling client
+    timer:sleep( 100 ),
     { ok, [ DevProps ] } = lurch_devman:list_devices(),
     St = proplists:get_value( state, DevProps ),
     [ ?_assertEqual( crashed, St ) ].
@@ -48,9 +50,9 @@ stop_devman( _ ) ->
 
 % Helper functions
 driver_config_single() ->
-    [ { driver, "test/single.sh" }
+    [ { driver, "test/echo.sh" }
     , { parameters, [] }
-    , { events, [ <<"blah">> ] }
+    , { events, [] }
     ].
 
 

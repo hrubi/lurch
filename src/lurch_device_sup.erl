@@ -12,9 +12,7 @@
 %% API
 -export(
     [ start_link/1
-    , start_link/2
-    , start_dev/2
-    , stop_dev/2
+    , start_link/4
     ] ).
 
 %% supervisor callbacks
@@ -26,22 +24,16 @@
 start_link( main ) ->
     supervisor:start_link( ?MODULE, main ).
 
-start_link( intermediate, Args ) ->
-    supervisor:start_link( ?MODULE, { intermediate, Args } ).
-
-start_dev( Sup, Args ) ->
-    supervisor:start_child( Sup, [ Args ] ).
-
-stop_dev( Sup, Pid ) ->
-    supervisor:terminate_child( Sup, Pid ).
+start_link( intermediate, M, F, A ) ->
+    supervisor:start_link( ?MODULE, { intermediate, M, F, A } ).
 
 % supervisor callbacks
 
 init( main ) ->
     { ok, { { simple_one_for_one, 5, 10 }, [ intermediate_spec() ] } };
 
-init( { intermediate, Args } ) ->
-    { ok, { { one_for_one, 5, 10 }, [ lurch_device_spec( Args ) ] }  }.
+init( { intermediate, M, F, A } ) ->
+    { ok, { { one_for_one, 5, 10 }, [ lurch_device_spec( M, F, A ) ] }  }.
 
 % internal
 intermediate_spec() ->
@@ -53,9 +45,9 @@ intermediate_spec() ->
     , [ ?MODULE ]
     }.
 
-lurch_device_spec( Args ) ->
+lurch_device_spec( M, F, A ) ->
     { any
-    , { lurch_device, start_link, Args }
+    , { M, F, A }
     , transient
     , 5000
     , worker
