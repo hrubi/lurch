@@ -293,7 +293,7 @@ server_scenario_test_() ->
     , fun() -> application:start( gproc ) end
     , fun( _ ) -> application:stop( gproc ) end
     , [ fun test_server_scenario/1
-      , fun test_crash_scenario/1
+      %, fun test_crash_scenario/1
       ]
     }.
 
