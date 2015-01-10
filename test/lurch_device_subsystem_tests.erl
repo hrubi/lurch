@@ -25,8 +25,6 @@ test_single( _ ) ->
         end,
         DevList1 ),
     ok = lurch_devman:stop_device( Id ),
-    % FIXME - the device stop should be synchronous for the calling client
-    timer:sleep( 100 ),
     { ok, DevList2 } = lurch_devman:list_devices(),
     [ ?_assertEqual( 1, length( DevList1 ) )
     , ?_assertEqual( "test/echo.sh", proplists:get_value( driver, DevProps ) )
