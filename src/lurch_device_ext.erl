@@ -289,10 +289,12 @@ stop_idempotent_test_() ->
 % server tests - API
 
 server_scenario_test_() ->
-    { setup
+    { foreach
     , fun() -> application:start( gproc ) end
     , fun( _ ) -> application:stop( gproc ) end
-    , fun test_server_scenario/1
+    , [ fun test_server_scenario/1
+      , fun test_crash_scenario/1
+      ]
     }.
 
 test_server_scenario( _ ) ->
@@ -310,6 +312,19 @@ test_server_scenario( _ ) ->
     , { "server stopped", ?_assertEqual( shutdown , ResStop ) }
     , { "server pid not alive", ?_assertEqual( ok, ResExit ) }
     ].
+
+
+% FIXME - this test can be subject to race conditions,
+% as it's not sure at what point the device crashes.
+test_crash_scenario( _ ) ->
+    Id = make_ref(),
+    { Pid, MonRef, ResStart } = start_test_server( Id, "crash.sh" ),
+    { ResStop, ResExit } = stop_test_server( Id, Pid, MonRef ),
+
+    [ { "server crashed", ?_assertEqual( ok, ResExit ) }
+    , { "stop crashing device", ?_assertNot( timeout =:= ResStop ) }
+    ].
+
 
 % Helper functions
 test_driver_path( Driver ) ->
@@ -344,7 +359,7 @@ stop_test_server( Id, Pid, MonRef ) ->
 
 exit_test_server( Pid, MonRef ) ->
     ExitRes = receive
-        { 'DOWN', MonRef, process, Pid, _ } -> ok
+        { 'DOWN', MonRef, process, Pid, Info } -> ok
     after
         ?DRIVER_TIMEOUT -> timeout
     end,
