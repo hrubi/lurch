@@ -60,14 +60,14 @@ poll_device_event( Device, Event ) ->
 %% gen_server callbacks
 %% ===================================================================
 -record( device,
-    { id         :: term()
-    , os_pid     :: non_neg_integer()
-    , driver     :: binary()
-    , parameters :: [ binary() ]
-    , events     :: [ binary() ]
-    , state      :: starting | running | stopping | crashed
-    , started_by :: term()
-    , stopped_by :: term()
+    { id              :: term()
+    , os_pid          :: non_neg_integer()
+    , driver          :: binary()
+    , parameters      :: [ binary() ]
+    , events          :: [ binary() ]
+    , state           :: starting | running | stopping | crashed
+    , started_by      :: term()
+    , stopped_by = [] :: [ term() ]
     } ).
 
 -record( state,
@@ -99,21 +99,9 @@ handle_call( { start_device, Configuration }, From, State ) ->
     NewState = State#state{ devices = Devices },
     { noreply, NewState };
 
-% FIXME - the state of the device should be checked
-% eg. can't be possible to stop it when it's already stopping
+
 handle_call( { stop_device, DeviceId }, From, State ) ->
-    case orddict:find( DeviceId, State#state.devices ) of
-        { ok, Device } ->
-            ok = lurch_device:stop( Device#device.id ),
-            NewDevices = orddict:update(
-                DeviceId,
-                fun( D ) -> D#device{ state = stopping, stopped_by = From } end,
-                State#state.devices
-            ),
-            NewState = State#state{ devices = NewDevices },
-            { noreply, NewState };
-        error -> {reply, { error, no_such_device }, State }
-    end;
+    handle_stop_device_request( DeviceId, From, State );
 
 
 handle_call( list_devices, _From, State ) ->
@@ -238,7 +226,8 @@ reply_stop( DeviceId, State ) ->
 % This can happen when there was device stop requested,
 % however the device has exited meanwhile.
 reply_stop( undefined ) -> ok;
-reply_stop( From ) -> gen_server:reply( From, ok ).
+reply_stop( Froms ) ->
+    [ gen_server:reply( From, ok ) || From <- Froms ].
 
 
 handle_poll( _Msg, _DeviceId, State ) ->
@@ -265,6 +254,25 @@ handle_device_transition( Id, Msg, Fun, State ) ->
     end.
 
 
+handle_stop_device_request( DeviceId, From, State ) ->
+    do_handle_stop_device_request(
+        orddict:find( DeviceId, State#state.devices ),
+        From, State
+     ).
+
+do_handle_stop_device_request( { ok, Device }, From, State ) ->
+    ok = lurch_device:stop( Device#device.id ),
+    NewDevice = Device#device{
+        state = stopping,
+        stopped_by = [ From | Device#device.stopped_by ]
+    },
+    NewDevices = orddict:store( Device#device.id, NewDevice, State#state.devices ),
+    NewState = State#state{ devices = NewDevices },
+    { noreply, NewState };
+
+do_handle_stop_device_request( error, _From, State ) ->
+    { reply, { error, no_such_device }, State }.
+
 
 %% ===================================================================
 %% Tests
@@ -286,6 +294,7 @@ server_test_() ->
     , fun setup_server_stop/1
     , [ fun test_start_stop_device/1
       , fun test_add_list_devices/1
+      , fun test_concurent_stop/1
       ]
     }.
 
@@ -311,6 +320,21 @@ test_start_stop_device( _ ) ->
                     StartResult <- StartResults ],
     [ [ { "start device", ?_assertEqual( ok, Res ) } || { Res, _ } <- StartResults ]
     , [ { "stop device", ?_assertMatch( ok, Res ) } || Res <- StopResults ]
+    ].
+
+
+test_concurent_stop( _ ) ->
+    { ok, Id } = start_device( dummy_driver_config() ),
+    Self = self(),
+    ClientFun = fun() ->
+        Self ! { self(), catch stop_device( Id ) }
+    end,
+    Pid1 = spawn( ClientFun ),
+    Pid2 = spawn( ClientFun ),
+    Res1 = receive { Pid1, R1 } -> R1 end,
+    Res2 = receive { Pid2, R2 } -> R2 end,
+    [ ?_assertEqual( ok, Res1 )
+    , ?_assertEqual( ok, Res2 )
     ].
 
 
@@ -388,7 +412,7 @@ test_stop_response( ok ) ->
     Id = make_ref(),
     Id2 = make_ref(),
     Device = #device{ id = Id, state = running,
-                      stopped_by = { make_ref(), self() } },
+                      stopped_by = [ { make_ref(), self() } ] },
     Devices = orddict:store( Id, Device, orddict:new() ),
     S0 = #state{ devices = Devices },
 
@@ -449,7 +473,12 @@ mocked_lurch_device_start( _, _, _, _ ) ->
     { ok, Id }.
 
 mocked_lurch_device_stop( Id ) ->
-    whereis( lurch_devman ) ! { stop, shutdown, Id },
-    ok.
+    NumCalls = meck:num_calls( lurch_device, stop, [ Id ] ),
+    if
+        NumCalls > 0 -> ok;
+        true ->
+            whereis( lurch_devman ) ! { stop, shutdown, Id },
+            ok
+    end.
 
 -endif. % TEST
