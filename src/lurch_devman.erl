@@ -417,21 +417,9 @@ test_stop_response( ok ) ->
 setup_server() ->
     { ok, _ } = start( fun() -> { ok, make_ref() } end ),
     ok = setup_meck(),
-    meck:expect( lurch_device, start,
-        fun( _, _, _, _ ) ->
-            Id = make_ref(),
-            whereis( lurch_devman ) !
-            { start, { ok, [ { os_pid, 123 } ] }, Id },
-            { ok, Id }
-        end
-    ),
-    meck:expect( lurch_device, stop,
-        fun( Id ) ->
-            whereis( lurch_devman ) !
-                { stop, shutdown, Id },
-            ok
-        end
-   ).
+    meck:expect( lurch_device, start, fun mocked_lurch_device_start/4 ),
+    meck:expect( lurch_device, stop, fun mocked_lurch_device_stop/1 ).
+
 
 setup_server_stop( _ ) ->
     setup_meck_stop( ok ),
@@ -454,5 +442,14 @@ dummy_driver_config() ->
     , { parameters, ?PARAMETERS }
     , { events, ?EVENTS }
     ].
+
+mocked_lurch_device_start( _, _, _, _ ) ->
+    Id = make_ref(),
+    whereis( lurch_devman ) ! { start, { ok, [ { os_pid, 123 } ] }, Id },
+    { ok, Id }.
+
+mocked_lurch_device_stop( Id ) ->
+    whereis( lurch_devman ) ! { stop, shutdown, Id },
+    ok.
 
 -endif. % TEST
