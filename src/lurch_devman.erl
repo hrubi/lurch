@@ -83,21 +83,7 @@ init( StartSupFun ) ->
 
 
 handle_call( { start_device, Configuration }, From, State ) ->
-    Driver = proplists:get_value(driver, Configuration),
-    Parameters = proplists:get_value(parameters, Configuration),
-    Events = proplists:get_value(events, Configuration, []),
-    { ok, DeviceId } = lurch_device:start(
-        State#state.dev_sup, Driver, Parameters, self()
-    ),
-    Device = #device{ id = DeviceId
-                    , driver = Driver
-                    , parameters = Parameters
-                    , events = Events
-                    , state = starting
-                    , started_by = From },
-    Devices = orddict:store( DeviceId, Device, State#state.devices ),
-    NewState = State#state{ devices = Devices },
-    { noreply, NewState };
+    handle_start_device_request( Configuration, From, State );
 
 
 handle_call( { stop_device, DeviceId }, From, State ) ->
@@ -272,6 +258,39 @@ do_handle_stop_device_request( { ok, Device }, From, State ) ->
 
 do_handle_stop_device_request( error, _From, State ) ->
     { reply, { error, no_such_device }, State }.
+
+
+handle_start_device_request( Config, From, State ) ->
+    [ Driver, Params, Events ] =
+        device_config( [ driver, parameters, events ], Config ),
+
+    { ok, DeviceId } =
+        lurch_device:start( State#state.dev_sup, Driver, Params, self() ),
+
+    NewState = add_new_device( DeviceId, { Driver, Params, Events, From }, State ),
+    { noreply, NewState }.
+
+
+add_new_device( Id, Device, State ) ->
+    NewDevices = orddict:store( Id, create_device( Id, Device ),
+                                State#state.devices ),
+    State#state{ devices = NewDevices }.
+
+
+create_device( Id, { Driver, Params, Events, From } ) ->
+    #device{
+       id = Id,
+       driver = Driver,
+       parameters = Params,
+       events = Events,
+       started_by = From
+    }.
+
+
+device_config( Values, Config ) when is_list( Values ) ->
+    [ proplists:get_value( Value, Config ) || Value <- Values ];
+device_config( Value, Config ) ->
+    proplists:get_value( Value, Config ).
 
 
 %% ===================================================================
