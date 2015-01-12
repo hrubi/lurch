@@ -38,6 +38,9 @@ start( Sup, Driver, Parameters, Owner ) ->
     DevId = { DevImpl, DevTag },
     StartFun = start_link,
     StartArgs = [ DevId, Driver, Parameters, Owner ],
+    % FIXME - client would probably like to monitor the supervisor as well,
+    %         to know when the device has finally crashed totally and won't
+    %         be restarted.
     { ok, _ } = supervisor:start_child( Sup, [ DevImpl, StartFun, StartArgs ] ),
     { ok, DevId }.
 
