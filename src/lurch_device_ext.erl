@@ -5,20 +5,13 @@
 -module( lurch_device_ext ).
 
 -behaviour( lurch_device ).
--behaviour( gen_server ).
 
-% API functions
+% lurch_device callbacks
 -export(
-    [ start/3
-    , start_link/4
-    , stop/1
-    , request_event/2
-    ] ).
-
-% gen_server callbacks
--export(
-    [ init/1, handle_call/3, handle_cast/2
-    , handle_info/2, terminate/2, code_change/3
+    [ start_driver/2
+    , stop_driver/2
+    , get_event/2
+    , handle_info/2
     ] ).
 
 -include( "lurch_device_proto.hrl" ).
@@ -26,122 +19,51 @@
 -ifndef( TEST ).
 -define( DRIVER_TIMEOUT, 5000 ).
 -else.
--define( DRIVER_TIMEOUT, 100 ).
+-define( DRIVER_TIMEOUT, 100 ). % FIXME - still needed
 -endif. % TEST
-
-
-%% ===================================================================
-%% API functions
-%% ===================================================================
-
--spec start( term(), binary(), [ binary() ] ) -> { ok, lurch_device:device_tag() }.
-% @doc This is meant only for tests, use start_link in application.
-start( Id, Driver, Parameters ) ->
-    start_server( fun gen_server:start/3, Id, Driver, Parameters, self() ).
-
--spec start_link( lurch_device:device_tag(), binary(), [ binary() ], pid() ) -> { ok, pid() }.
-start_link( Id, Driver, Parameters, Owner ) ->
-    start_server( fun gen_server:start_link/3, Id, Driver, Parameters, Owner ).
-
-
--spec stop( term() ) -> ok.
-stop( Id ) ->
-    gen_server:cast( lurch_proc:via( Id ), stop ).
-
-
--spec request_event( term(), string() ) -> { ok, lurch_device:msg_tag() }.
-request_event( Id, Event ) ->
-    Tag = make_ref(),
-    ok = gen_server:cast( lurch_proc:via( Id ), { get_event, Event, Tag } ),
-    { ok, Tag }.
 
 
 %% ===================================================================
 %% gen_server callbacks
 %% ===================================================================
 
--record( state,
-    { id :: term()
-    , owner :: pid()
-    , port :: port() | undefined
-    } ).
-
-init( { Id, Driver, Params, Owner } ) ->
-    process_flag( trap_exit, true ),
-    true = lurch_proc:reg( Id ),
-    self() ! { start_driver, Driver, Params },
-    { ok, #state{ id = Id, owner = Owner} }.
-
-
-handle_call( _Msg, _From, State ) ->
-    { stop, { error, unsupported_call }, State }.
-
-handle_cast( { get_event, Event, Tag }, State ) ->
-    { ok, EventRes } = get_event( State#state.port, Event ),
-    send_owner( State, event, EventRes, Tag ),
-    { noreply, State };
-
-handle_cast( stop, State ) ->
-    { stop, shutdown, State }.
-
-
-handle_info( { start_driver, Driver, Params }, State ) ->
-    case start_driver( Driver, Params ) of
-        { ok, Port } ->
-            Info = [ erlang:port_info( Port, os_pid ) ],
-            send_owner( State, start, { ok, Info } ),
-            { noreply, State#state{ port = Port } };
-        Error ->
-            send_owner( State, start, Error ),
-            { stop, Error , State }
-    end;
-
-handle_info( { Port, { exit_status, ExitCode } }, State )
-    when Port =:= State#state.port ->
-    { stop, { exit, ExitCode }, State }.
-
-
-terminate( Reason, State ) ->
-    handle_stop( Reason, State ).
-
-
-code_change( _OldVsn, State, _Extra ) ->
-    { ok, State }.
-
-
+% FIXME - tbd
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
 
-send_owner( State, Event, Msg ) ->
-    send_owner( State, Event, Msg, State#state.id ).
-
-send_owner( State, Event, Msg, Id ) ->
-    State#state.owner ! { Event, Msg, Id }.
+-record( ctx,
+    { port
+    , os_pid % probably unneeded??
+    } ).
 
 -spec start_driver( string() | binary(), [ string() | binary() ] ) ->
-    { ok, port() } | { error, term() }.
+    { ok, term(), term() } | { error, term(), term() }.
 start_driver( Driver, Parameters ) ->
     try Port = open_port( { spawn_executable, driver_path( Driver ) },
                           [ { args, Parameters }
                           , { line, 8 }
                           , exit_status
                           , use_stdio ] ),
-        { ok, Port }
+        OsPid = erlang:port_info( Port, os_pid ),
+        { ok, [ OsPid ], #ctx{ port = Port, os_pid = OsPid } }
     catch
-        error:Error -> { error, Error }
+        error:Error -> { error, Error, #ctx{} }
     end.
 
-handle_stop( Reason, State ) ->
-    ok = stop_driver( State#state.port ),
-    send_owner( State, stop, Reason ).
+handle_info( { Port, { exit_status, ExitCode } }, Ctx )
+    when Port =:= Ctx#ctx.port ->
+    { error, { exit, ExitCode }, Ctx }.
 
--spec stop_driver( port() ) -> ok.
-stop_driver( Port ) ->
-    case erlang:port_info( Port, os_pid ) of
+
+-spec stop_driver( term(), term() ) -> ok.
+stop_driver( _Reason, Ctx ) ->
+    Port = Ctx#ctx.port,
+    Result = case erlang:port_info( Port, os_pid ) of
         { os_pid, Pid } -> do_stop_driver( Port, Pid );
         undefined -> ok
-    end.
+    end,
+    { Result, stop, #ctx{} }.
 
 -spec do_stop_driver( port(), non_neg_integer() ) -> ok.
 do_stop_driver( Port, Pid ) ->
@@ -154,18 +76,20 @@ do_stop_driver( Port, Pid ) ->
     end.
 
 
--spec get_event( port(), string() ) -> { ok, term() }.
-get_event( Port, Event ) ->
+-spec get_event( term(), term() ) -> { ok, term(), term() }.
+get_event( Event, Ctx ) ->
+    Port = Ctx#ctx.port,
     true = erlang:port_command( Port, format_cmd( ?EVENT, [ Event ] ) ),
-    get_event_acc( Port, [], [], ?DRIVER_TIMEOUT ).
+    Result = get_event_acc( Port, [], [], ?DRIVER_TIMEOUT ),
+    { ok, Result, Ctx }.
 
--spec get_event_acc( port(), list( list() ), list(), integer() ) -> { ok, list() }.
+% FIXME - refactor
+-spec get_event_acc( port(), list( list() ), list(), integer() ) -> list().
 get_event_acc( Port, DataAcc, LineAcc, Timeout ) ->
     Start = now(),
     receive
         { Port, { data, { eol, "OK" } } } ->
-            Result = lists:map( fun lists:flatten/1, lists:reverse(DataAcc)),
-            { ok, Result };
+            lists:map( fun lists:flatten/1, lists:reverse(DataAcc));
 
         { Port, { data, { eol, Data } } } ->
             Line = lists:reverse( [ Data | LineAcc ] ),
@@ -207,9 +131,6 @@ format_cmd( Cmd, Data ) ->
     string:join( [ Cmd | Data ] ++ ["OK\n"], "\n" ).
 
 
-start_server( Fun, Id, Driver, Parameters, Owner ) ->
-    Fun( ?MODULE, { Id, Driver, Parameters, Owner }, [] ).
-
 %% ===================================================================
 %% Tests
 %% ===================================================================
@@ -228,102 +149,64 @@ path_test_() ->
             , ?_assertThrow( { unsafe_relative_path, unsafe }, driver_path( unsafe ) )
             ] } }.
 
+% FIXME - move relevant tests to lurch_device
 
 start_stop_test_() ->
-    { ok, Port } = start_test_driver( "echo.sh" ),
-    IsPort = erlang:is_port( Port ),
-    stop_driver( Port ),
-    StoppedPortInfo = erlang:port_info( Port ),
+    { ok, _Info, Ctx } = start_test_driver( "echo.sh" ),
+    IsPort = erlang:is_port( Ctx#ctx.port ),
+    stop_driver( shutdown, Ctx ),
+    StoppedPortInfo = erlang:port_info( Ctx#ctx.port ),
     [ { "port started", ?_assert( IsPort ) }
     , { "port stopped", ?_assertEqual( undefined, StoppedPortInfo ) }
     ].
 
 
 start_nonexistent_test_() ->
-    ?_assertEqual( { error, enoent }, start_test_driver( "nonexistent.sh" ) ).
+    ?_assertMatch( { error, enoent, #ctx{} }, start_test_driver( "nonexistent.sh" ) ).
 
 
 stuck_test_() ->
-    { ok, Port } = start_test_driver( "stuck.sh" ),
-    { os_pid, OsPid } = erlang:port_info( Port, os_pid ),
-    ResStop = stop_driver( Port ),
+    { ok, _Info, Ctx } = start_test_driver( "stuck.sh" ),
+    { os_pid, OsPid } = erlang:port_info( Ctx#ctx.port, os_pid ),
+    ResStop = stop_driver( shutdown, Ctx ),
     IsOsPidAliveCmd = lists:flatten( io_lib:format("kill -0 ~b", [ OsPid ] ) ),
-    [ { "stop driver", ?_assertEqual( ok, ResStop ) }
+    [ { "stop driver", ?_assertMatch( { ok, _, _ }, ResStop ) }
     , { "process killed", ?_assertCmdStatus( 1, IsOsPidAliveCmd ) }
     ].
 
 
 get_event_test_() ->
-    { ok, Port } = start_test_driver( "echo.sh" ),
-    Res = get_event( Port, "SomeEvent" ),
-    ResStop = stop_driver( Port ),
-    ExpData = { ok, [ ?EVENT, "SomeEvent" ] },
-    [ { "get event", ?_assertEqual( ExpData, Res ) }
-    , { "stop driver", ?_assertEqual( ok, ResStop ) }
+    { ok, _Info, Ctx } = start_test_driver( "echo.sh" ),
+    Res = get_event( "SomeEvent", Ctx ),
+    ResStop = stop_driver( shutdown, Ctx ),
+    [ { "get event", ?_assertMatch( { ok, [ ?EVENT, "SomeEvent" ], _ }, Res ) }
+    , { "stop driver", ?_assertMatch( { ok, _, _ }, ResStop ) }
     ].
 
 
 timeout_test_() ->
-    { ok, Port } = start_test_driver( "stuck.sh" ),
+    { ok, _Info, Ctx } = start_test_driver( "stuck.sh" ),
     [ { "driver timeout"
-      , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
-    , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
+      , ?_assertThrow( { timeout, _ }, get_event( "SomeEvent", Ctx ) ) }
+    , { "stop driver" , ?_assertMatch( { ok, _, _ }, stop_driver( shutdown, Ctx ) ) }
     ].
 
 
 timeout2_test_() ->
-    { ok, Port } = start_test_driver( "garbage.sh" ),
+    { ok, _Info, Ctx } = start_test_driver( "garbage.sh" ),
     [ { "driver timeout when sending garbage"
-      , ?_assertThrow( { timeout, _ }, get_event( Port, "SomeEvent" ) ) }
-    , { "stop driver" , ?_assertEqual( ok, stop_driver( Port ) ) }
+      , ?_assertThrow( { timeout, _ }, get_event( "SomeEvent", Ctx ) ) }
+    , { "stop driver" , ?_assertMatch( { ok, _, _ }, stop_driver( shutdown, Ctx ) ) }
     ].
 
+% FIXME - not sure if relevant
+%       - indepotency should be likely handled by lurch_devman
 stop_idempotent_test_() ->
-    { ok, Port } = start_test_driver( "echo.sh" ),
+    { ok, _Info, Ctx } = start_test_driver( "echo.sh" ),
     Tries = 2,
     [ { lists:flatten( io_lib:format( "stop ~B", [ Try ] ) ),
-        ?_assertEqual( ok, stop_driver( Port ) ) }
+        ?_assertMatch( { ok, _, _ }, stop_driver( shutdown, Ctx ) ) }
       || Try <- lists:seq( 1, Tries ) ].
-
-
-% server tests - API
-
-server_scenario_test_() ->
-    { foreach
-    , fun() -> application:start( gproc ) end
-    , fun( _ ) -> application:stop( gproc ) end
-    , [ fun test_server_scenario/1
-      %, fun test_crash_scenario/1
-      ]
-    }.
-
-test_server_scenario( _ ) ->
-    Id = make_ref(),
-    { Pid, MonRef, ResStart } = start_test_server( Id, "echo.sh" ),
-    ProcAlive = is_process_alive( Pid ),
-    ResEvent = request_event_test_server( Id, "SomeEvent" ),
-    { ResStop, ResExit } = stop_test_server( Id, Pid, MonRef ),
-
-    [ { "server started", ?_assertMatch( { ok, _ }, ResStart ) }
-    , { "server pid alive", ?_assert( ProcAlive ) }
-    , { "receive event", ?_assertEqual(
-                            [ ?EVENT, "SomeEvent" ],
-                            ResEvent ) }
-    , { "server stopped", ?_assertEqual( shutdown , ResStop ) }
-    , { "server pid not alive", ?_assertEqual( ok, ResExit ) }
-    ].
-
-
-% FIXME - this test can be subject to race conditions,
-% as it's not sure at what point the device crashes.
-test_crash_scenario( _ ) ->
-    Id = make_ref(),
-    { Pid, MonRef, ResStart } = start_test_server( Id, "crash.sh" ),
-    { ResStop, ResExit } = stop_test_server( Id, Pid, MonRef ),
-
-    [ { "server crashed", ?_assertEqual( ok, ResExit ) }
-    , { "stop crashing device", ?_assertNot( timeout =:= ResStop ) }
-    ].
 
 
 % Helper functions
@@ -333,44 +216,5 @@ test_driver_path( Driver ) ->
 
 start_test_driver( Driver ) ->
     start_driver( test_driver_path( Driver ), [] ).
-
-
-start_test_server( Id, Driver ) ->
-    { ok, Pid } = start( Id, test_driver_path( Driver ), [] ),
-    MonRef = erlang:monitor( process, Pid ),
-    StartRes = receive
-        { start, Res, Id } -> Res
-    after
-        ?DRIVER_TIMEOUT -> timeout
-    end,
-    { Pid, MonRef, StartRes }.
-
-
-stop_test_server( Id, Pid, MonRef ) ->
-    ok = stop( Id ),
-    StopRes = receive
-        { stop, Res, Id } -> Res
-    after
-        ?DRIVER_TIMEOUT -> timeout
-    end,
-    ExitRes = exit_test_server( Pid, MonRef ),
-    { StopRes, ExitRes }.
-
-
-exit_test_server( Pid, MonRef ) ->
-    ExitRes = receive
-        { 'DOWN', MonRef, process, Pid, Info } -> ok
-    after
-        ?DRIVER_TIMEOUT -> timeout
-    end,
-    ExitRes.
-
-request_event_test_server( Id, Event ) ->
-    { ok, T } = request_event( Id, Event ),
-    receive
-        { event, E, T } -> E
-    after
-        ?DRIVER_TIMEOUT -> timeout
-    end.
 
 -endif. % TEST

@@ -191,7 +191,7 @@ reply_start( DeviceId, State, Msg ) ->
     Device = orddict:fetch( DeviceId, State#state.devices ),
     gen_server:reply( Device#device.started_by, Msg ).
 
-handle_stop( shutdown, DeviceId, State ) ->
+handle_stop( { ok, _Reason }, DeviceId, State ) ->
     reply_stop( DeviceId, State ),
     Devices = orddict:erase( DeviceId, State#state.devices ),
     State#state{ devices = Devices };
@@ -435,8 +435,8 @@ test_stop_response( ok ) ->
     Devices = orddict:store( Id, Device, orddict:new() ),
     S0 = #state{ devices = Devices },
 
-    { noreply, S1 } = handle_info( { stop, shutdown, Id }, S0 ),
-    ResNonEx = handle_info( { stop, shutdown, Id2 }, S0 ),
+    { noreply, S1 } = handle_info( { stop, { ok, shutdown }, Id }, S0 ),
+    ResNonEx = handle_info( { stop, { ok, shutdown }, Id2 }, S0 ),
 
     { noreply, S2 } = handle_info( { stop, { exit, 1 }, Id }, S0 ),
     ResNonEx2 = handle_info( { stop, { exit, 1 }, Id2 }, S0 ),
