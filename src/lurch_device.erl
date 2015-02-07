@@ -125,7 +125,10 @@ terminate( Reason, State ) ->
 
 
 code_change( OldVsn, State, Extra ) ->
-    call_impl( code_change, [ OldVsn, State#state.context, Extra ], State ).
+    optional_call_impl(
+      code_change, [ OldVsn, State#state.context, Extra ], State,
+      { ok, State }
+     ).
 
 
 %% ===================================================================
@@ -136,6 +139,14 @@ driver_impl( Driver )
     when is_binary( Driver ) or
          is_list( Driver )
     -> lurch_device_ext.
+
+optional_call_impl( Func, Params, State, DefReturn ) ->
+    Impl = State#state.impl,
+    Arity = length( Params ),
+    case erlang:function_exported( Impl, Func, Arity ) of
+        true -> call_impl( Func, Params, State );
+        false -> DefReturn
+    end.
 
 call_impl_ctx( Func, Params, State ) ->
     call_impl_ctx( Func, Params, State, State#state.id ).
@@ -194,6 +205,7 @@ impl_test_() ->
       [ fun test_start_device/1
       , fun test_get_event/1
       , fun test_code_change/1
+      , fun test_no_code_change/1
       %, fun test_stop_device/1
       ]
     }.
@@ -216,12 +228,26 @@ test_get_event( S0 ) ->
     ].
 
 test_code_change( S0 ) ->
+    mock_impl_module_code_change(),
+
     R1 = code_change( make_ref(), S0, go_well ),
     R2 = code_change( make_ref(), S0, go_wrong ),
-    [ ?_assertMatch( { ok, _Ctx }, R1 )
-    , ?_assertMatch( { error, _Error }, R2 )
+    [ ?_assertMatch( { ok, #state{ context = context1 } }, R1 )
+    , ?_assertMatch( { error, went_wrong }, R2 )
     ].
 
+test_no_code_change( S0 ) ->
+    R1 = code_change( make_ref(), S0, go_well ),
+    R2 = code_change( make_ref(), S0, go_wrong ),
+    [ ?_assertMatch( { ok, S0 }, R1 )
+    , ?_assertMatch( { ok, S0 }, R2 )
+    ].
+
+mock_impl_module_code_change() ->
+    meck:expect( ?IMPL, code_change,
+        fun( _OldVsn, _Ctx, go_well ) -> { ok, context1 };
+           ( _OldVsn, _Ctx, go_wrong ) -> { error, went_wrong }
+        end ).
 
 mock_impl_module() ->
     meck:new( ?IMPL, [ non_strict ] ),
@@ -232,10 +258,6 @@ mock_impl_module() ->
     meck:expect( ?IMPL, get_event,
         fun( good_event, _Ctx ) -> { ok, value, context1 };
            ( bad_event, _Ctx ) -> { error, reason, context2 }
-        end ),
-    meck:expect( ?IMPL, code_change,
-        fun( _OldVsn, _Ctx, go_well ) -> { ok, new_state };
-           ( _OldVsn, _Ctx, go_wrong ) -> { error, went_wrong }
         end ),
     meck:expect( ?IMPL, stop_driver, fun( _, _ ) -> ok end ),
 
