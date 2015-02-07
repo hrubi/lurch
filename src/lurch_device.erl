@@ -124,9 +124,8 @@ terminate( Reason, State ) ->
     ok.
 
 
-code_change( _OldVsn, State, _Extra ) ->
-    % FIXME - call the implementation's code_change
-    { ok, State }.
+code_change( OldVsn, State, Extra ) ->
+    call_impl( code_change, [ OldVsn, State#state.context, Extra ], State ).
 
 
 %% ===================================================================
@@ -153,6 +152,13 @@ call_impl( Func, Params, State, Tag ) ->
     Action = impl_func_to_action_name( Func ),
     handle_impl_result( Result, Action, State, Tag ).
 
+handle_impl_result( { ok, Context }, code_change, State, _Tag ) ->
+    NewState = State#state{ context = Context },
+    { ok, NewState };
+
+handle_impl_result( { error, _ } = Result, code_change, _State, _Tag ) ->
+    Result;
+
 handle_impl_result( { ok, Result, Context }, Action, State, Tag ) ->
     NewState = State#state{ context = Context },
     send_owner( NewState, Action, { ok, Result }, Tag ),
@@ -165,7 +171,8 @@ handle_impl_result( { error, Result, Context }, Action, State, Tag ) ->
 
 impl_func_to_action_name( start_driver ) -> start;
 impl_func_to_action_name( stop_driver ) -> stop;
-impl_func_to_action_name( get_event ) -> event.
+impl_func_to_action_name( get_event ) -> event;
+impl_func_to_action_name( code_change ) -> code_change.
 
 send_owner( State, Event, Msg, Id ) ->
     State#state.owner ! { Event, Msg, Id }.
@@ -186,6 +193,7 @@ impl_test_() ->
       fun mock_impl_module_stop/1,
       [ fun test_start_device/1
       , fun test_get_event/1
+      , fun test_code_change/1
       %, fun test_stop_device/1
       ]
     }.
@@ -207,6 +215,13 @@ test_get_event( S0 ) ->
     , ?_assertMatch( { stop, reason, #state{ context = context2 } }, R2 )
     ].
 
+test_code_change( S0 ) ->
+    R1 = code_change( make_ref(), S0, go_well ),
+    R2 = code_change( make_ref(), S0, go_wrong ),
+    [ ?_assertMatch( { ok, _Ctx }, R1 )
+    , ?_assertMatch( { error, _Error }, R2 )
+    ].
+
 
 mock_impl_module() ->
     meck:new( ?IMPL, [ non_strict ] ),
@@ -217,6 +232,10 @@ mock_impl_module() ->
     meck:expect( ?IMPL, get_event,
         fun( good_event, _Ctx ) -> { ok, value, context1 };
            ( bad_event, _Ctx ) -> { error, reason, context2 }
+        end ),
+    meck:expect( ?IMPL, code_change,
+        fun( _OldVsn, _Ctx, go_well ) -> { ok, new_state };
+           ( _OldVsn, _Ctx, go_wrong ) -> { error, went_wrong }
         end ),
     meck:expect( ?IMPL, stop_driver, fun( _, _ ) -> ok end ),
 
