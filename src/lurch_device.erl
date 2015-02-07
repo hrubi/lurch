@@ -11,11 +11,11 @@
     { ok | error, Result :: term(), Context :: term() }
     | { error, Result :: term(), Context :: term() }.
 
--callback get_event( Event :: term(), Context :: term() ) ->
-    { ok | error, Result :: term(), NewContext :: term() }.
-
 -callback stop_driver( Reason :: term(), Context :: term() ) ->
     { ok | error , Result :: term(), NewContext :: term() }.
+
+-callback get_event( Event :: term(), Context :: term() ) ->
+    { ok | error, Result :: term(), NewContext :: term() }.
 
 -callback handle_info( Msg :: term(), Context :: term() ) ->
     { ok | error, Result :: term(), NewContext :: term() }.
