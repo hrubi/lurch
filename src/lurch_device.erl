@@ -197,7 +197,6 @@ send_owner( State, Event, Msg, Id ) ->
 
 -define( IMPL, lurch_device_impl ).
 
-
 impl_test_() ->
     { foreach,
       fun mock_impl_module/0,
@@ -212,19 +211,29 @@ impl_test_() ->
 
 test_start_device( S0 ) ->
     R1 = handle_info( { start_driver, good_driver, [ params ] }, S0 ),
-    R2 = handle_info( { start_driver, bad_driver, [ params ] }, S0 ),
-    % FIXME - test the side effects (send to owner)
+    R2 = receive_owner_notification( start, { ok, started }, S0#state.id ),
+
+    R3 = handle_info( { start_driver, bad_driver, [ params ] }, S0 ),
+    R4 = receive_owner_notification( start, { error, crashed }, S0#state.id ),
+
     [ ?_assertMatch( { noreply, #state{ context = context1 } }, R1 )
-    , ?_assertMatch( { stop, crashed, #state{ context = context2 } }, R2 )
+    , ?_assertEqual( ok, R2 )
+    , ?_assertMatch( { stop, crashed, #state{ context = context2 } }, R3 )
+    , ?_assertEqual( ok, R4 )
     ].
 
 test_get_event( S0 ) ->
     Tag = make_ref(),
     R1 = handle_cast( { get_event, good_event, Tag }, S0 ),
-    R2 = handle_cast( { get_event, bad_event, Tag }, S0 ),
-    % FIXME - test the side effects (send to owner)
+    R2 = receive_owner_notification( event, { ok, value }, Tag ),
+
+    R3 = handle_cast( { get_event, bad_event, Tag }, S0 ),
+    R4 = receive_owner_notification( event, { error, reason }, Tag ),
+
     [ ?_assertMatch( { noreply, #state{ context = context1 } }, R1 )
-    , ?_assertMatch( { stop, reason, #state{ context = context2 } }, R2 )
+    , ?_assertEqual( ok, R2 )
+    , ?_assertMatch( { stop, reason, #state{ context = context2 } }, R3 )
+    , ?_assertEqual( ok, R4 )
     ].
 
 test_code_change( S0 ) ->
@@ -242,6 +251,12 @@ test_no_code_change( S0 ) ->
     [ ?_assertMatch( { ok, S0 }, R1 )
     , ?_assertMatch( { ok, S0 }, R2 )
     ].
+
+receive_owner_notification( Action, Msg, Id ) ->
+    receive
+        { Action, Msg, Id } -> ok
+    after 100 -> timeout
+    end.
 
 mock_impl_module_code_change() ->
     meck:expect( ?IMPL, code_change,
