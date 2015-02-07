@@ -168,7 +168,6 @@ impl_func_to_action_name( stop_driver ) -> stop;
 impl_func_to_action_name( get_event ) -> event.
 
 send_owner( State, Event, Msg, Id ) ->
-    io:format( user, "send_owner: Event: ~p Msg: ~p Id: ~p~n", [ Event, Msg, Id ] ),
     State#state.owner ! { Event, Msg, Id }.
 
 
