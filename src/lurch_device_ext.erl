@@ -24,12 +24,7 @@
 
 
 %% ===================================================================
-%% gen_server callbacks
-%% ===================================================================
-
-% FIXME - tbd
-%% ===================================================================
-%% Internal functions
+%% lurch_device callbacks
 %% ===================================================================
 
 -record( ctx,
@@ -51,11 +46,6 @@ start_driver( Driver, Parameters ) ->
         error:Error -> { error, Error, #ctx{} }
     end.
 
-handle_info( { Port, { exit_status, ExitCode } }, Ctx )
-    when Port =:= Ctx#ctx.port ->
-    { error, { exit, ExitCode }, Ctx }.
-
-
 -spec stop_driver( term(), term() ) -> ok.
 stop_driver( _Reason, Ctx ) ->
     Port = Ctx#ctx.port,
@@ -64,6 +54,15 @@ stop_driver( _Reason, Ctx ) ->
         undefined -> ok
     end,
     { Result, stop, #ctx{} }.
+
+handle_info( { Port, { exit_status, ExitCode } }, Ctx )
+    when Port =:= Ctx#ctx.port ->
+    { error, { exit, ExitCode }, Ctx }.
+
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
 
 -spec do_stop_driver( port(), non_neg_integer() ) -> ok.
 do_stop_driver( Port, Pid ) ->
